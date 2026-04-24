@@ -72,8 +72,8 @@ SELECT
 FROM (
   SELECT
     generate_series(
-      '2024-01-01'::DATE,
-      '2026-02-28'::DATE,
+      '2024-04-01'::DATE,
+      '2026-04-24'::DATE,
       '1 day'::INTERVAL
     ) AS date,
     p.id AS product_id,

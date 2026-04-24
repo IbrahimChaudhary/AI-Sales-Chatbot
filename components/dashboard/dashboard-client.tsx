@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { MetricCard } from "./metric-card";
 import { DashboardCharts } from "./dashboard-charts";
-import { DateRangeSelector, DateRange, getDateRangeParams } from "./date-range-selector";
+import {
+  DateRangeSelector,
+  DateRange,
+  getDateRangeParams,
+} from "./date-range-selector";
 import { DollarSign, ShoppingCart, TrendingUp, Package } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
@@ -76,7 +80,13 @@ export function DashboardClient() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Revenue"
-          value={`$${data.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          value={
+            data.totalRevenue >= 1_00_000
+              ? `$${(data.totalRevenue / 1_000_000).toFixed(2)}M`
+              : data.totalRevenue >= 1_000
+                ? `$${(data.totalRevenue / 1_000).toFixed(1)}K`
+                : `$${data.totalRevenue.toFixed(2)}`
+          }
           icon={DollarSign}
           description="Selected period"
         />
@@ -88,7 +98,7 @@ export function DashboardClient() {
         />
         <MetricCard
           title="Avg Order Value"
-          value={`$${data.avgOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          value={`$${data.avgOrderValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
           icon={TrendingUp}
           description="Average per transaction"
         />

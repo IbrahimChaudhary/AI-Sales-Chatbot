@@ -1,5 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import type { SalesTransaction, SalesTrend, SalesSummary } from "@/lib/types/database";
+import type {
+  SalesTransaction,
+  SalesTrend,
+  SalesSummary,
+} from "@/lib/types/database";
 
 export async function getSalesTransactions(
   limit: number = 100,
@@ -9,7 +13,7 @@ export async function getSalesTransactions(
     customer_segment?: string;
     startDate?: string;
     endDate?: string;
-  }
+  },
 ) {
   const supabase = await createClient();
 
@@ -44,7 +48,7 @@ export async function getSalesTransactions(
 export async function getSalesTrend(
   category?: string,
   region?: string,
-  months: number = 12
+  months: number = 12,
 ) {
   const supabase = await createClient();
 
@@ -116,7 +120,8 @@ export async function getTotalRevenue(filters?: {
     }
   }
 
-  const total = allData.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
+  const total =
+    allData.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
   return total;
 }
 

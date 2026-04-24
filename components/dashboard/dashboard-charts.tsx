@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { SalesTransaction } from "@/lib/types/database";
 import {
   BarChart,
   Bar,
@@ -17,7 +18,7 @@ import {
   Legend,
 } from "recharts";
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
 interface SalesTrendData {
   month: string;
@@ -34,20 +35,11 @@ interface RegionalData {
   value: number;
 }
 
-interface Transaction {
-  id: string;
-  product_name: string;
-  region: string;
-  category: string;
-  total_amount: string | number;
-  transaction_date: string;
-}
-
 interface DashboardChartsProps {
   trendData: SalesTrendData[];
   categoryData: CategoryData[];
   regionalData: RegionalData[];
-  transactions: Transaction[];
+  transactions: SalesTransaction[];
 }
 
 export function DashboardCharts({
@@ -60,13 +52,22 @@ export function DashboardCharts({
     <div className="grid gap-4 md:grid-cols-2">
       {/* Sales Trend Chart */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Sales Trend (Last 6 Months)</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          Sales Trend (Last 6 Months)
+        </h3>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={trendData}>
+          <LineChart
+            data={trendData}
+            margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+            <YAxis
+              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+            />
+            <Tooltip
+              formatter={(value) => `$${Number(value).toLocaleString()}`}
+            />
             <Legend />
             <Line
               type="monotone"
@@ -83,11 +84,18 @@ export function DashboardCharts({
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Sales by Category</h3>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={categoryData}>
+          <BarChart
+            data={categoryData}
+            margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+            <YAxis
+              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+            />
+            <Tooltip
+              formatter={(value) => `$${Number(value).toLocaleString()}`}
+            />
             <Bar dataKey="value" fill="#8884d8" name="Revenue" />
           </BarChart>
         </ResponsiveContainer>
@@ -104,17 +112,22 @@ export function DashboardCharts({
               cy="50%"
               labelLine={false}
               label={({ name, percent }) =>
-                `${name} ${(percent * 100).toFixed(0)}%`
+                `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
               }
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
             >
               {regionalData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={COLORS[index % COLORS.length]}
+                />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+            <Tooltip
+              formatter={(value) => `$${Number(value).toLocaleString()}`}
+            />
           </PieChart>
         </ResponsiveContainer>
       </Card>
@@ -129,7 +142,9 @@ export function DashboardCharts({
               className="flex justify-between items-center border-b pb-2"
             >
               <div>
-                <p className="font-medium text-sm">{transaction.product_name}</p>
+                <p className="font-medium text-sm">
+                  {transaction.product_name}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {transaction.region} • {transaction.category}
                 </p>
