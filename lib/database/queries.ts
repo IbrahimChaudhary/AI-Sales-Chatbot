@@ -78,28 +78,45 @@ export async function getTotalRevenue(filters?: {
 }) {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("sales_transactions")
-    .select("total_amount");
+  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
+  let allData: any[] = [];
+  let start = 0;
+  const pageSize = 1000;
+  let hasMore = true;
 
-  if (filters?.category) {
-    query = query.eq("category", filters.category);
-  }
-  if (filters?.region) {
-    query = query.eq("region", filters.region);
-  }
-  if (filters?.startDate) {
-    query = query.gte("transaction_date", filters.startDate);
-  }
-  if (filters?.endDate) {
-    query = query.lte("transaction_date", filters.endDate);
+  while (hasMore) {
+    let query = supabase
+      .from("sales_transactions")
+      .select("total_amount")
+      .range(start, start + pageSize - 1);
+
+    if (filters?.category) {
+      query = query.eq("category", filters.category);
+    }
+    if (filters?.region) {
+      query = query.eq("region", filters.region);
+    }
+    if (filters?.startDate) {
+      query = query.gte("transaction_date", filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte("transaction_date", filters.endDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      start += pageSize;
+      hasMore = data.length === pageSize;
+    } else {
+      hasMore = false;
+    }
   }
 
-  const { data, error } = await query;
-
-  if (error) throw error;
-
-  const total = data?.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
+  const total = allData.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
   return total;
 }
 
@@ -109,24 +126,41 @@ export async function getCategoryBreakdown(filters?: {
 }) {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("sales_transactions")
-    .select("category, total_amount");
+  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
+  let allData: any[] = [];
+  let start = 0;
+  const pageSize = 1000;
+  let hasMore = true;
 
-  if (filters?.startDate) {
-    query = query.gte("transaction_date", filters.startDate);
+  while (hasMore) {
+    let query = supabase
+      .from("sales_transactions")
+      .select("category, total_amount")
+      .range(start, start + pageSize - 1);
+
+    if (filters?.startDate) {
+      query = query.gte("transaction_date", filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte("transaction_date", filters.endDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      start += pageSize;
+      hasMore = data.length === pageSize; // Continue if we got a full page
+    } else {
+      hasMore = false;
+    }
   }
-  if (filters?.endDate) {
-    query = query.lte("transaction_date", filters.endDate);
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw error;
 
   // Aggregate by category
   const categoryMap = new Map<string, number>();
-  data?.forEach((item) => {
+  allData.forEach((item) => {
     const current = categoryMap.get(item.category) || 0;
     categoryMap.set(item.category, current + Number(item.total_amount));
   });
@@ -143,24 +177,41 @@ export async function getRegionalSales(filters?: {
 }) {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("sales_transactions")
-    .select("region, total_amount");
+  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
+  let allData: any[] = [];
+  let start = 0;
+  const pageSize = 1000;
+  let hasMore = true;
 
-  if (filters?.startDate) {
-    query = query.gte("transaction_date", filters.startDate);
+  while (hasMore) {
+    let query = supabase
+      .from("sales_transactions")
+      .select("region, total_amount")
+      .range(start, start + pageSize - 1);
+
+    if (filters?.startDate) {
+      query = query.gte("transaction_date", filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte("transaction_date", filters.endDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      start += pageSize;
+      hasMore = data.length === pageSize;
+    } else {
+      hasMore = false;
+    }
   }
-  if (filters?.endDate) {
-    query = query.lte("transaction_date", filters.endDate);
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw error;
 
   // Aggregate by region
   const regionMap = new Map<string, number>();
-  data?.forEach((item) => {
+  allData.forEach((item) => {
     const current = regionMap.get(item.region) || 0;
     regionMap.set(item.region, current + Number(item.total_amount));
   });

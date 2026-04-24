@@ -25,7 +25,7 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
 
   console.log("Executing filtered query with AI-extracted params:", toolArgs);
 
-  const {
+  let {
     category,
     region,
     customer_segment,
@@ -34,6 +34,16 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
     months = 12,
     dataType
   } = toolArgs;
+
+  // CRITICAL FIX: Convert months to startDate/endDate if not provided
+  if (!startDate && !endDate && months) {
+    const today = new Date();
+    endDate = today.toISOString().split("T")[0];
+    const calculatedStartDate = new Date();
+    calculatedStartDate.setMonth(calculatedStartDate.getMonth() - months);
+    startDate = calculatedStartDate.toISOString().split("T")[0];
+    console.log(`Converted months (${months}) to date range: ${startDate} to ${endDate}`);
+  }
 
   try {
     // Fetch based on dataType or intelligently determine what to fetch

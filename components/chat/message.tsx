@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Bot, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { SalesChart } from "@/components/charts/sales-chart";
+import { ChartModal } from "@/components/charts/chart-modal";
 import type { ChartData } from "@/lib/types/database";
 
 interface MessageProps {
@@ -13,6 +15,13 @@ interface MessageProps {
 
 export function Message({ role, content }: MessageProps) {
   const isUser = role === "user";
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedChart, setSelectedChart] = useState<ChartData | null>(null);
+
+  const handleChartClick = (chartData: ChartData) => {
+    setSelectedChart(chartData);
+    setIsModalOpen(true);
+  };
 
   // Extract chart blocks from content (flexible whitespace)
   const chartRegex = /```chart\s*([\s\S]*?)```/g;
@@ -135,11 +144,23 @@ export function Message({ role, content }: MessageProps) {
 
         {/* Render charts */}
         {charts.map((chartData, index) => (
-          <div key={index} className="my-4">
+          <div
+            key={index}
+            className="my-4 cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            onClick={() => handleChartClick(chartData)}
+            title="Click to view larger chart"
+          >
             <SalesChart chartData={chartData} />
           </div>
         ))}
       </div>
+
+      {/* Chart Modal */}
+      <ChartModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        chartData={selectedChart}
+      />
     </div>
   );
 }
