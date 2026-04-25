@@ -11,9 +11,18 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { data, error, count } = await supabase
       .from("sales_transactions")
       .select("*", { count: "exact" })
+      .eq("user_id", user.id)
       .order("transaction_date", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -32,7 +41,7 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
       { error: "Failed to fetch transactions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -63,13 +72,21 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "All fields are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const total_amount = quantity * unit_price;
 
     const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { data, error } = await supabase
       .from("sales_transactions")
@@ -84,6 +101,7 @@ export async function POST(request: NextRequest) {
           total_amount,
           customer_segment,
           region,
+          user_id: user.id,
         },
       ])
       .select()
@@ -96,7 +114,7 @@ export async function POST(request: NextRequest) {
     console.error("Error creating transaction:", error);
     return NextResponse.json(
       { error: "Failed to create transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -120,13 +138,21 @@ export async function PUT(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { error: "Transaction ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const total_amount = quantity * unit_price;
 
     const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { data, error } = await supabase
       .from("sales_transactions")
@@ -142,6 +168,7 @@ export async function PUT(request: NextRequest) {
         region,
       })
       .eq("id", id)
+      .eq("user_id", user.id)
       .select()
       .single();
 
@@ -152,7 +179,7 @@ export async function PUT(request: NextRequest) {
     console.error("Error updating transaction:", error);
     return NextResponse.json(
       { error: "Failed to update transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -166,11 +193,19 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { error: "Transaction ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { error } = await supabase
       .from("sales_transactions")
@@ -184,7 +219,7 @@ export async function DELETE(request: NextRequest) {
     console.error("Error deleting transaction:", error);
     return NextResponse.json(
       { error: "Failed to delete transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

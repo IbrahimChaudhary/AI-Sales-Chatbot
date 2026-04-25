@@ -1,20 +1,22 @@
 -- Enable pgvector extension for vector embeddings
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Products table
+-- Products table (per-user)
 CREATE TABLE IF NOT EXISTS products (
   id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   price DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Sales transactions table
+-- Sales transactions table (per-user)
 CREATE TABLE IF NOT EXISTS sales_transactions (
   id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   transaction_date DATE NOT NULL,
-  product_id INTEGER REFERENCES products(id),
+  product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
   product_name TEXT NOT NULL,
   category TEXT NOT NULL,
   quantity INTEGER NOT NULL,
@@ -25,7 +27,7 @@ CREATE TABLE IF NOT EXISTS sales_transactions (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Document embeddings table for RAG (Retrieval Augmented Generation)
+-- Document embeddings table for RAG (shared across users)
 CREATE TABLE IF NOT EXISTS document_embeddings (
   id SERIAL PRIMARY KEY,
   content TEXT NOT NULL,
@@ -34,76 +36,35 @@ CREATE TABLE IF NOT EXISTS document_embeddings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better query performance
+-- Indexes for query performance
+CREATE INDEX IF NOT EXISTS idx_products_user_id ON products(user_id);
+CREATE INDEX IF NOT EXISTS idx_sales_transactions_user_id ON sales_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales_transactions(transaction_date);
 CREATE INDEX IF NOT EXISTS idx_sales_category ON sales_transactions(category);
 CREATE INDEX IF NOT EXISTS idx_sales_region ON sales_transactions(region);
 CREATE INDEX IF NOT EXISTS idx_sales_segment ON sales_transactions(customer_segment);
 
--- Create HNSW index for vector similarity search
+-- HNSW index for vector similarity search
 CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON document_embeddings
 USING hnsw (embedding vector_cosine_ops);
 
--- Insert sample products
-INSERT INTO products (name, category, price) VALUES
-('Laptop Pro 15"', 'Electronics', 1299.99),
-('Wireless Mouse', 'Electronics', 29.99),
-('Office Chair', 'Furniture', 249.99),
-('Standing Desk', 'Furniture', 499.99),
-('Notebook Pack', 'Stationery', 12.99),
-('Pen Set', 'Stationery', 8.99),
-('Monitor 27"', 'Electronics', 349.99),
-('Keyboard Mechanical', 'Electronics', 89.99),
-('Desk Lamp', 'Furniture', 45.99),
-('File Cabinet', 'Furniture', 189.99);
-
--- Insert sample sales data (2 years of monthly data)
-INSERT INTO sales_transactions (transaction_date, product_id, product_name, category, quantity, unit_price, total_amount, customer_segment, region)
-SELECT
-  date::DATE,
-  product_id,
-  product_name,
-  category,
-  quantity,
-  unit_price,
-  quantity * unit_price AS total_amount,
-  customer_segment,
-  region
-FROM (
-  SELECT
-    generate_series(
-      '2024-04-01'::DATE,
-      '2026-04-24'::DATE,
-      '1 day'::INTERVAL
-    ) AS date,
-    p.id AS product_id,
-    p.name AS product_name,
-    p.category,
-    p.price AS unit_price,
-    (RANDOM() * 10 + 1)::INTEGER AS quantity,
-    (ARRAY['Enterprise', 'SMB', 'Individual', 'Education'])[FLOOR(RANDOM() * 4 + 1)] AS customer_segment,
-    (ARRAY['North America', 'Europe', 'Asia Pacific', 'Latin America'])[FLOOR(RANDOM() * 4 + 1)] AS region
-  FROM products p
-  CROSS JOIN generate_series(1, 3) -- Generate 3 transactions per product per day for variety
-  WHERE RANDOM() > 0.7 -- Only generate ~30% of potential transactions for realistic sparsity
-) AS sales_data;
-
--- Insert sample document embeddings for context
+-- Insert shared document embeddings (RAG context, not per-user)
 INSERT INTO document_embeddings (content, metadata) VALUES
 ('Our company specializes in office supplies, electronics, and furniture. We serve enterprise, SMB, individual, and education customers across four major regions.',
  '{"type": "company_info", "category": "general"}'),
 ('Sales typically peak during Q4 (October-December) due to holiday shopping and end-of-year budgets. Q1 shows slower growth as customers recover from holiday spending.',
  '{"type": "sales_pattern", "category": "trends"}'),
-('Electronics category shows highest revenue, followed by furniture and stationery. Laptop Pro 15 and Standing Desk are our top sellers.',
+('Electronics category shows highest revenue, followed by furniture and stationery.',
  '{"type": "product_performance", "category": "products"}'),
 ('Enterprise customers contribute 40% of revenue, SMB 30%, Individual 20%, and Education 10%. Enterprise deals are larger but less frequent.',
  '{"type": "customer_insights", "category": "segments"}'),
 ('North America is our largest market (45%), followed by Europe (30%), Asia Pacific (15%), and Latin America (10%).',
  '{"type": "regional_breakdown", "category": "geography"}');
 
--- Create a view for quick analytics
+-- View for quick analytics (filtered by RLS at query time, so per-user automatically)
 CREATE OR REPLACE VIEW sales_summary AS
 SELECT
+  user_id,
   DATE_TRUNC('month', transaction_date) AS month,
   category,
   region,
@@ -113,10 +74,10 @@ SELECT
   SUM(total_amount) AS total_revenue,
   AVG(total_amount) AS avg_transaction_value
 FROM sales_transactions
-GROUP BY DATE_TRUNC('month', transaction_date), category, region, customer_segment
+GROUP BY user_id, DATE_TRUNC('month', transaction_date), category, region, customer_segment
 ORDER BY month DESC, total_revenue DESC;
 
--- Create a function for sales forecasting data
+-- Function for sales forecasting (filtered to current user)
 CREATE OR REPLACE FUNCTION get_sales_trend(
   p_category TEXT DEFAULT NULL,
   p_region TEXT DEFAULT NULL,
@@ -135,18 +96,21 @@ BEGIN
     COUNT(*) AS transaction_count
   FROM sales_transactions
   WHERE
-    (p_category IS NULL OR category = p_category)
+    user_id = auth.uid()
+    AND (p_category IS NULL OR category = p_category)
     AND (p_region IS NULL OR region = p_region)
     AND transaction_date >= CURRENT_DATE - (p_months || ' months')::INTERVAL
   GROUP BY DATE_TRUNC('month', transaction_date)
   ORDER BY month;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
--- Grant necessary permissions (if using RLS, adjust accordingly)
--- For now, we'll keep it simple for testing
-COMMENT ON TABLE sales_transactions IS 'Stores all sales transaction data for analytics';
-COMMENT ON TABLE products IS 'Product catalog';
-COMMENT ON TABLE document_embeddings IS 'Vector embeddings for RAG-based chat context';
-COMMENT ON VIEW sales_summary IS 'Aggregated sales data by month, category, region, and segment';
-COMMENT ON FUNCTION get_sales_trend IS 'Returns sales trend data for forecasting';
+-- Comments for documentation
+COMMENT ON TABLE sales_transactions IS 'Per-user sales transaction data for analytics';
+COMMENT ON TABLE products IS 'Per-user product catalog';
+COMMENT ON TABLE document_embeddings IS 'Shared vector embeddings for RAG-based chat context';
+COMMENT ON VIEW sales_summary IS 'Aggregated per-user sales data by month, category, region, and segment';
+COMMENT ON FUNCTION get_sales_trend IS 'Returns per-user sales trend data for forecasting';
+
+-- NOTE: RLS policies for products and sales_transactions are added in Step 10/11.
+-- Until policies are in place, those tables should remain RLS-disabled for development.

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { seedDataForNewUser } from "@/app/auth/actions";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -23,6 +24,9 @@ export default function SignupPage() {
       email,
       password,
     });
+
+    //Adding random data for new user.
+    await seedDataForNewUser();
 
     setLoading(false);
 
