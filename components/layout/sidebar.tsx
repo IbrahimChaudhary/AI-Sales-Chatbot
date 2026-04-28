@@ -11,9 +11,10 @@ import {
   Menu,
   X,
   LogOut,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { ThemeToggle } from "../Theme/ThemeToggle";
 import { signOut } from "@/app/auth/actions";
 
@@ -31,7 +32,15 @@ interface SidebarProps {
 export function Sidebar({ userEmail }: SidebarProps) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoggingOut, startLogoutTransition] = useTransition();
   const year = new Date().getFullYear();
+
+  function handleLogout() {
+    startLogoutTransition(async () => {
+      await signOut();
+    });
+  }
+
   return (
     <>
       {/* Mobile menu button */}
@@ -63,6 +72,7 @@ export function Sidebar({ userEmail }: SidebarProps) {
               <ThemeToggle />
             </div>
           </div>
+
           {/* Navigation */}
           <nav className="flex-1 space-y-1 px-3 py-4">
             {navigation.map((item) => {
@@ -96,17 +106,25 @@ export function Sidebar({ userEmail }: SidebarProps) {
                   <p className="text-xs text-muted-foreground">Signed in as</p>
                   <p className="truncate text-sm font-medium">{userEmail}</p>
                 </div>
-                <form action={signOut}>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start gap-2"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Log out
-                  </Button>
-                </form>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Logging out...
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="h-4 w-4" />
+                      Log out
+                    </>
+                  )}
+                </Button>
               </div>
             ) : (
               <Link

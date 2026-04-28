@@ -27,8 +27,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Loader from "@/components/Loader";
+import Link from "next/link";
 
 interface Transaction {
   id: number;
@@ -43,31 +45,51 @@ interface Transaction {
   region: string;
 }
 
-const CATEGORIES = ["Electronics", "Furniture", "Stationery"];
+interface Product {
+  id: number;
+  name: string;
+  category: string;
+  price: number;
+}
+
 const SEGMENTS = ["Enterprise", "SMB", "Individual", "Education"];
 const REGIONS = ["North America", "Europe", "Asia Pacific", "Latin America"];
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Form state — note product_id replaces product_name as the source of truth
   const [formData, setFormData] = useState({
     transaction_date: "",
-    product_name: "",
-    category: "",
+    product_id: "",
     quantity: "",
     unit_price: "",
     customer_segment: "",
     region: "",
   });
+
   const { toast } = useToast();
+
+  // Derive selected product from product_id (avoids storing redundant state)
+  const selectedProduct = products.find(
+    (p) => p.id.toString() === formData.product_id,
+  );
 
   useEffect(() => {
     fetchTransactions();
   }, [page]);
+
+  // Fetch products once on mount — they're needed for the form
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   const fetchTransactions = async () => {
     try {
@@ -88,13 +110,27 @@ export default function TransactionsPage() {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await fetch("/api/products");
+      if (!response.ok) throw new Error("Failed to fetch products");
+      const result = await response.json();
+      setProducts(result);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load products",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleOpenDialog = (transaction?: Transaction) => {
     if (transaction) {
       setEditingTransaction(transaction);
       setFormData({
         transaction_date: transaction.transaction_date,
-        product_name: transaction.product_name,
-        category: transaction.category,
+        product_id: transaction.product_id?.toString() ?? "",
         quantity: transaction.quantity.toString(),
         unit_price: transaction.unit_price.toString(),
         customer_segment: transaction.customer_segment,
@@ -104,8 +140,7 @@ export default function TransactionsPage() {
       setEditingTransaction(null);
       setFormData({
         transaction_date: new Date().toISOString().split("T")[0],
-        product_name: "",
-        category: "",
+        product_id: "",
         quantity: "",
         unit_price: "",
         customer_segment: "",
@@ -120,24 +155,48 @@ export default function TransactionsPage() {
     setEditingTransaction(null);
   };
 
+  // When the product changes, auto-fill price (but only for new transactions —
+  // leave existing transactions alone so users can preserve historical prices)
+  const handleProductChange = (product_id: string) => {
+    const product = products.find((p) => p.id.toString() === product_id);
+
+    setFormData((prev) => ({
+      ...prev,
+      product_id,
+      // Auto-fill price only if not already set or we're creating a new transaction
+      unit_price:
+        product && !editingTransaction
+          ? product.price.toString()
+          : prev.unit_price,
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!selectedProduct) {
+      toast({
+        title: "Error",
+        description: "Please select a product",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       const url = "/api/transactions";
       const method = editingTransaction ? "PUT" : "POST";
-      const body = editingTransaction
-        ? {
-            id: editingTransaction.id,
-            ...formData,
-            quantity: parseInt(formData.quantity),
-            unit_price: parseFloat(formData.unit_price),
-          }
-        : {
-            ...formData,
-            quantity: parseInt(formData.quantity),
-            unit_price: parseFloat(formData.unit_price),
-          };
+      const body = {
+        ...(editingTransaction && { id: editingTransaction.id }),
+        transaction_date: formData.transaction_date,
+        product_id: selectedProduct.id,
+        product_name: selectedProduct.name,
+        category: selectedProduct.category,
+        quantity: parseInt(formData.quantity),
+        unit_price: parseFloat(formData.unit_price),
+        customer_segment: formData.customer_segment,
+        region: formData.region,
+      };
 
       const response = await fetch(url, {
         method,
@@ -188,6 +247,8 @@ export default function TransactionsPage() {
     }
   };
 
+  const hasNoProducts = products.length === 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -195,17 +256,26 @@ export default function TransactionsPage() {
           <h1 className="text-3xl font-bold">Transactions</h1>
           <p className="text-muted-foreground">Manage sales transactions</p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <Button onClick={() => handleOpenDialog()} disabled={hasNoProducts}>
           <Plus className="h-4 w-4 mr-2" />
           Add Transaction
         </Button>
       </div>
 
+      {hasNoProducts && (
+        <Card className="p-6 text-center">
+          <p className="text-muted-foreground">
+            You need to add at least one product before creating a transaction.{" "}
+            <Link href="/products" className="font-medium underline">
+              Add a product
+            </Link>
+          </p>
+        </Card>
+      )}
+
       <Card>
         {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
+          <Loader />
         ) : (
           <>
             <Table>
@@ -225,12 +295,18 @@ export default function TransactionsPage() {
                 {transactions.map((transaction) => (
                   <TableRow key={transaction.id}>
                     <TableCell>
-                      {new Date(transaction.transaction_date).toLocaleDateString()}
+                      {new Date(
+                        transaction.transaction_date,
+                      ).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className="font-medium">{transaction.product_name}</TableCell>
+                    <TableCell className="font-medium">
+                      {transaction.product_name}
+                    </TableCell>
                     <TableCell>{transaction.category}</TableCell>
                     <TableCell>{transaction.quantity}</TableCell>
-                    <TableCell>${transaction.total_amount.toFixed(2)}</TableCell>
+                    <TableCell>
+                      ${transaction.total_amount.toFixed(2)}
+                    </TableCell>
                     <TableCell>{transaction.customer_segment}</TableCell>
                     <TableCell>{transaction.region}</TableCell>
                     <TableCell className="text-right">
@@ -299,47 +375,54 @@ export default function TransactionsPage() {
                   type="date"
                   value={formData.transaction_date}
                   onChange={(e) =>
-                    setFormData({ ...formData, transaction_date: e.target.value })
+                    setFormData({
+                      ...formData,
+                      transaction_date: e.target.value,
+                    })
                   }
                   required
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="product_name">Product Name</Label>
-                <Input
-                  id="product_name"
-                  value={formData.product_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, product_name: e.target.value })
-                  }
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="product">Product</Label>
                 <Select
-                  value={formData.category}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, category: value })
-                  }
+                  value={formData.product_id}
+                  onValueChange={handleProductChange}
+                  required
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
+                  <SelectTrigger id="product">
+                    <SelectValue placeholder="Select a product" />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
+                    {products.map((product) => (
+                      <SelectItem
+                        key={product.id}
+                        value={product.id.toString()}
+                      >
+                        {product.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Input
+                  id="category"
+                  value={selectedProduct?.category ?? ""}
+                  disabled
+                  placeholder="Auto-filled from product"
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="quantity">Quantity</Label>
                 <Input
                   id="quantity"
                   type="number"
+                  min="1"
                   value={formData.quantity}
                   onChange={(e) =>
                     setFormData({ ...formData, quantity: e.target.value })
@@ -347,12 +430,14 @@ export default function TransactionsPage() {
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="unit_price">Unit Price</Label>
                 <Input
                   id="unit_price"
                   type="number"
                   step="0.01"
+                  min="0"
                   value={formData.unit_price}
                   onChange={(e) =>
                     setFormData({ ...formData, unit_price: e.target.value })
@@ -360,6 +445,7 @@ export default function TransactionsPage() {
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="customer_segment">Customer Segment</Label>
                 <Select
@@ -367,8 +453,9 @@ export default function TransactionsPage() {
                   onValueChange={(value) =>
                     setFormData({ ...formData, customer_segment: value })
                   }
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="customer_segment">
                     <SelectValue placeholder="Select segment" />
                   </SelectTrigger>
                   <SelectContent>
@@ -380,6 +467,7 @@ export default function TransactionsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="region">Region</Label>
                 <Select
@@ -387,8 +475,9 @@ export default function TransactionsPage() {
                   onValueChange={(value) =>
                     setFormData({ ...formData, region: value })
                   }
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="region">
                     <SelectValue placeholder="Select region" />
                   </SelectTrigger>
                   <SelectContent>
@@ -401,8 +490,13 @@ export default function TransactionsPage() {
                 </Select>
               </div>
             </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleCloseDialog}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloseDialog}
+              >
                 Cancel
               </Button>
               <Button type="submit">

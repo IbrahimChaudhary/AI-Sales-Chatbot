@@ -1,6 +1,13 @@
 import { OpenRouter } from "@openrouter/sdk";
-import { tools, parseToolArguments, describeToolFilters } from "@/lib/ai/tools-definition";
-import { executeFilteredQuery, executeSemanticQuery } from "@/lib/llamaindex/hybrid-query-refactored";
+import {
+  tools,
+  parseToolArguments,
+  describeToolFilters,
+} from "@/lib/ai/tools-definition";
+import {
+  executeFilteredQuery,
+  executeSemanticQuery,
+} from "@/lib/llamaindex/hybrid-query-refactored";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -37,7 +44,7 @@ export async function POST(req: Request) {
       })),
       {
         role: "user",
-        content: userMessage
+        content: userMessage,
       },
     ];
 
@@ -53,7 +60,10 @@ export async function POST(req: Request) {
       },
     });
 
-    console.log("Initial AI response:", JSON.stringify(initialCompletion, null, 2).substring(0, 500));
+    console.log(
+      "Initial AI response:",
+      JSON.stringify(initialCompletion, null, 2).substring(0, 500),
+    );
 
     let dataResult: any = null;
     let queryType: "semantic" | "filtered" = "semantic";
@@ -83,7 +93,8 @@ export async function POST(req: Request) {
     }
 
     // STEP 3: Build context message with data
-    const isChartRequest = /\b(visual|chart|graph|show me|display|plot|visualiz)/i.test(userMessage);
+    const isChartRequest =
+      /\b(visual|chart|graph|show me|display|plot|visualiz)/i.test(userMessage);
 
     let contextMessage = "\n\n=== DATABASE DATA ===\n";
 
@@ -99,7 +110,8 @@ export async function POST(req: Request) {
 
     if (isChartRequest) {
       contextMessage += "=== CRITICAL INSTRUCTIONS ===\n";
-      contextMessage += "A chart is being AUTOMATICALLY generated. DO NOT describe the chart or data.\n\n";
+      contextMessage +=
+        "A chart is being AUTOMATICALLY generated. DO NOT describe the chart or data.\n\n";
       contextMessage += "Your response MUST:\n";
       contextMessage += "- Be 1-2 sentences MAXIMUM\n";
       contextMessage += "- Give ONLY high-level business insight\n";
@@ -111,8 +123,10 @@ export async function POST(req: Request) {
       contextMessage += "- Markdown symbols (#, ```, -, *)\n";
       contextMessage += "- Chart specifications (type, xKey, yKey, etc.)\n";
       contextMessage += "- Raw data or array contents\n\n";
-      contextMessage += "GOOD: 'The trend shows steady progress with opportunities for growth.'\n";
-      contextMessage += "BAD: 'March 2025 had revenue of $461300' or '```chart' or any technical details.\n";
+      contextMessage +=
+        "GOOD: 'The trend shows steady progress with opportunities for growth.'\n";
+      contextMessage +=
+        "BAD: 'March 2025 had revenue of $461300' or '```chart' or any technical details.\n";
     } else {
       contextMessage += "Analyze this data and provide insights.";
     }
@@ -122,10 +136,9 @@ export async function POST(req: Request) {
       ...chatMessages,
       {
         role: "user",
-        content: contextMessage
-      }
+        content: contextMessage,
+      },
     ];
-
     // @ts-ignore
     const finalCompletion = await openrouter.chat.send({
       chatGenerationParams: {
@@ -166,7 +179,7 @@ export async function POST(req: Request) {
                 title: filterDescription
                   ? `Regional Sales - ${filterDescription}`
                   : "Regional Sales Distribution",
-                data: dataResult.relevantData.regional_sales
+                data: dataResult.relevantData.regional_sales,
               };
             }
             // Priority 2: Category breakdown (pie chart)
@@ -176,7 +189,7 @@ export async function POST(req: Request) {
                 title: filterDescription
                   ? `Sales by Category - ${filterDescription}`
                   : "Sales by Category",
-                data: dataResult.relevantData.category_breakdown
+                data: dataResult.relevantData.category_breakdown,
               };
             }
             // Priority 3: Sales trend (line chart)
@@ -188,13 +201,16 @@ export async function POST(req: Request) {
                   : "Revenue Trend",
                 data: dataResult.relevantData.sales_trend,
                 xKey: "month",
-                yKey: "revenue"
+                yKey: "revenue",
               };
             }
 
             if (chartData) {
-              const chartBlock = "\n\n```chart\n" + JSON.stringify(chartData, null, 2) + "\n```";
-              controller.enqueue(encoder.encode(`0:${JSON.stringify(chartBlock)}\n`));
+              const chartBlock =
+                "\n\n```chart\n" + JSON.stringify(chartData, null, 2) + "\n```";
+              controller.enqueue(
+                encoder.encode(`0:${JSON.stringify(chartBlock)}\n`),
+              );
               console.log("Chart block sent");
             }
           }
@@ -221,7 +237,7 @@ export async function POST(req: Request) {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 }

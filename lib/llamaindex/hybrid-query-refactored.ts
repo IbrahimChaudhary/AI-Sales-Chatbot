@@ -19,7 +19,9 @@ export interface HybridQueryResult {
  * Execute filtered query using AI-extracted parameters
  * This is called when the AI invokes the get_sales_data tool
  */
-export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryResult> {
+export async function executeFilteredQuery(
+  toolArgs: any,
+): Promise<HybridQueryResult> {
   const relevantData: any = {};
   const sources: string[] = [];
 
@@ -31,8 +33,8 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
     customer_segment,
     startDate,
     endDate,
-    months = 12,
-    dataType
+    months,
+    dataType,
   } = toolArgs;
 
   // CRITICAL FIX: Convert months to startDate/endDate if not provided
@@ -42,7 +44,13 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
     const calculatedStartDate = new Date();
     calculatedStartDate.setMonth(calculatedStartDate.getMonth() - months);
     startDate = calculatedStartDate.toISOString().split("T")[0];
-    console.log(`Converted months (${months}) to date range: ${startDate} to ${endDate}`);
+
+    endDate = toLocalISO(today);
+    startDate = toLocalISO(calculatedStartDate);
+
+    console.log(
+      `Converted months (${months}) to date range: ${startDate} to ${endDate}`,
+    );
   }
 
   try {
@@ -75,17 +83,19 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
         startDate,
         endDate,
       });
+      console.log("Total revenue:", relevantData.total_revenue);
       sources.push("total_revenue");
     }
 
     if (dataType === "transactions") {
-      relevantData.transactions = await getSalesTransactions(50, {
+      relevantData.transactions = await getSalesTransactions(undefined, {
         category,
         region,
         customer_segment,
         startDate,
         endDate,
       });
+      console.log("Transactions count:", relevantData.transactions.length);
       sources.push("transactions");
     }
 
@@ -101,15 +111,25 @@ export async function executeFilteredQuery(toolArgs: any): Promise<HybridQueryRe
   }
 }
 
+// Local timezone-safe ISO date formatter (no UTC shift)
+function toLocalISO(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Execute semantic search using LlamaIndex
  * This is used for general queries without specific filters
  */
-export async function executeSemanticQuery(userQuery: string): Promise<HybridQueryResult> {
+export async function executeSemanticQuery(
+  userQuery: string,
+): Promise<HybridQueryResult> {
   console.log("Executing semantic query with LlamaIndex");
 
   const llamaResult = await querySalesData(userQuery);
-
+  console.log("LLama Result:", llamaResult);
   if (!llamaResult) {
     throw new Error("Semantic query returned no results");
   }

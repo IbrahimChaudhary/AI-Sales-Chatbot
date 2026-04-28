@@ -53,7 +53,7 @@ export function DashboardCharts({
       {/* Sales Trend Chart */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">
-          Sales Trend (Last 6 Months)
+          Sales Trend (Last {trendData.length - 1} Months)
         </h3>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart

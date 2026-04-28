@@ -6,7 +6,7 @@ import type {
 } from "@/lib/types/database";
 
 export async function getSalesTransactions(
-  limit: number = 100,
+  limit?: number,
   filters?: {
     category?: string;
     region?: string;
@@ -20,8 +20,11 @@ export async function getSalesTransactions(
   let query = supabase
     .from("sales_transactions")
     .select("*")
-    .order("transaction_date", { ascending: false })
-    .limit(limit);
+    .order("transaction_date", { ascending: false });
+
+  if (limit !== undefined) {
+    query = query.limit(limit);
+  }
 
   if (filters?.category) {
     query = query.eq("category", filters.category);
@@ -44,7 +47,26 @@ export async function getSalesTransactions(
   if (error) throw error;
   return data as SalesTransaction[];
 }
-
+// Helper to keep the filter logic in one place
+function applyFilters(
+  query: any,
+  filters?: {
+    category?: string;
+    region?: string;
+    customer_segment?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+) {
+  if (filters?.category) query = query.eq("category", filters.category);
+  if (filters?.region) query = query.eq("region", filters.region);
+  if (filters?.customer_segment)
+    query = query.eq("customer_segment", filters.customer_segment);
+  if (filters?.startDate)
+    query = query.gte("transaction_date", filters.startDate);
+  if (filters?.endDate) query = query.lte("transaction_date", filters.endDate);
+  return query;
+}
 export async function getSalesTrend(
   category?: string,
   region?: string,

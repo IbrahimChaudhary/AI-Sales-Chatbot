@@ -20,8 +20,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import Loader from "@/components/Loader";
 
 interface Product {
   id: number;
@@ -93,7 +101,11 @@ export default function ProductsPage() {
       const url = "/api/products";
       const method = editingProduct ? "PUT" : "POST";
       const body = editingProduct
-        ? { id: editingProduct.id, ...formData, price: parseFloat(formData.price) }
+        ? {
+            id: editingProduct.id,
+            ...formData,
+            price: parseFloat(formData.price),
+          }
         : { ...formData, price: parseFloat(formData.price) };
 
       const response = await fetch(url, {
@@ -160,9 +172,7 @@ export default function ProductsPage() {
 
       <Card>
         {loading ? (
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="h-8 w-8 animate-spin" />
-          </div>
+          <Loader />
         ) : (
           <Table>
             <TableHeader>
@@ -228,14 +238,22 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
+                <Select
                   value={formData.category}
-                  onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, category: value })
                   }
                   required
-                />
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Electronics">Electronics</SelectItem>
+                    <SelectItem value="Furniture">Furniture</SelectItem>
+                    <SelectItem value="Stationery">Stationery</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="price">Price</Label>
@@ -252,7 +270,11 @@ export default function ProductsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={handleCloseDialog}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloseDialog}
+              >
                 Cancel
               </Button>
               <Button type="submit">

@@ -6,10 +6,12 @@ import { DashboardCharts } from "./dashboard-charts";
 import {
   DateRangeSelector,
   DateRange,
+  CustomDateRange,
   getDateRangeParams,
 } from "./date-range-selector";
 import { DollarSign, ShoppingCart, TrendingUp, Package } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import Loader from "../Loader";
 
 interface DashboardData {
   totalRevenue: number;
@@ -24,17 +26,24 @@ interface DashboardData {
 
 export function DashboardClient() {
   const [dateRange, setDateRange] = useState<DateRange>("6m");
+  const [customRange, setCustomRange] = useState<CustomDateRange>({});
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Don't fetch when "custom" is selected but the user hasn't picked dates yet —
+    // wait until they finish selecting both start and end.
+    if (dateRange === "custom" && (!customRange.from || !customRange.to)) {
+      setLoading(false);
+      return;
+    }
     fetchDashboardData();
-  }, [dateRange]);
+  }, [dateRange, customRange]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const params = getDateRangeParams(dateRange);
+      const params = getDateRangeParams(dateRange, customRange);
       const queryParams = new URLSearchParams();
 
       if (params.startDate) queryParams.append("startDate", params.startDate);
@@ -53,70 +62,73 @@ export function DashboardClient() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="text-center p-12 text-muted-foreground">
-        Failed to load dashboard data. Please try again.
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Date Range Selector */}
       <div className="flex justify-end">
-        <DateRangeSelector value={dateRange} onChange={setDateRange} />
-      </div>
-
-      {/* Metrics Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Total Revenue"
-          value={
-            data.totalRevenue >= 1_00_000
-              ? `$${(data.totalRevenue / 1_000_000).toFixed(2)}M`
-              : data.totalRevenue >= 1_000
-                ? `$${(data.totalRevenue / 1_000).toFixed(1)}K`
-                : `$${data.totalRevenue.toFixed(2)}`
-          }
-          icon={DollarSign}
-          description="Selected period"
-        />
-        <MetricCard
-          title="Transactions"
-          value={data.transactionCount.toLocaleString()}
-          icon={ShoppingCart}
-          description="Total transactions"
-        />
-        <MetricCard
-          title="Avg Order Value"
-          value={`$${data.avgOrderValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          icon={TrendingUp}
-          description="Average per transaction"
-        />
-        <MetricCard
-          title="Categories"
-          value={data.categoryCount}
-          icon={Package}
-          description="Product categories"
+        <DateRangeSelector
+          value={dateRange}
+          onChange={setDateRange}
+          customRange={customRange}
+          onCustomRangeChange={setCustomRange}
         />
       </div>
 
-      {/* Charts Grid */}
-      <DashboardCharts
-        trendData={data.trendData}
-        categoryData={data.categoryData}
-        regionalData={data.regionalData}
-        transactions={data.transactions}
-      />
+      {/* Helpful prompt when in custom mode but dates not yet picked */}
+      {dateRange === "custom" && (!customRange.from || !customRange.to) && (
+        <div className="rounded-md border border-dashed p-12 text-center text-muted-foreground">
+          Pick a start and end date to see your data.
+        </div>
+      )}
+      {loading && <Loader />}
+      {/* Only render dashboard contents when we have data */}
+      {data &&
+        !loading &&
+        !(dateRange === "custom" && (!customRange.from || !customRange.to)) && (
+          <>
+            {/* Metrics Grid */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                title="Total Revenue"
+                value={
+                  data.totalRevenue >= 1_000_000
+                    ? `$${(data.totalRevenue / 1_000_000).toFixed(2)}M`
+                    : data.totalRevenue >= 1_000
+                      ? `$${(data.totalRevenue / 1_000).toFixed(1)}K`
+                      : `$${data.totalRevenue.toFixed(2)}`
+                }
+                icon={DollarSign}
+                description="Selected period"
+              />
+              <MetricCard
+                title="Transactions"
+                value={data.transactionCount.toLocaleString()}
+                icon={ShoppingCart}
+                description="Total transactions"
+              />
+              <MetricCard
+                title="Avg Order Value"
+                value={`$${data.avgOrderValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                icon={TrendingUp}
+                description="Average per transaction"
+              />
+              <MetricCard
+                title="Categories"
+                value={data.categoryCount}
+                icon={Package}
+                description="Product categories"
+              />
+            </div>
+
+            {/* Charts Grid */}
+            <DashboardCharts
+              trendData={data.trendData}
+              categoryData={data.categoryData}
+              regionalData={data.regionalData}
+              transactions={data.transactions}
+            />
+          </>
+        )}
     </div>
   );
 }
