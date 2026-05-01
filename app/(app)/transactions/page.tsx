@@ -29,9 +29,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import Loader from "@/components/Loader";
 import Link from "next/link";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TransactionsSkeleton } from "@/components/transactions/transactions-skeleton";
 
 interface Transaction {
@@ -511,3 +509,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+

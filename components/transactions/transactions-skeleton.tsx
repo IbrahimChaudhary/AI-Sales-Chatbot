@@ -1,9 +1,13 @@
-import { Table } from "lucide-react";
-import { Skeleton } from "../ui/skeleton";
-import { TableHeader, TableRow, TableHead, TableBody, TableCell } from "../ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-
-{/* Transaction Skeleton */}
 interface TransactionsSkeletonProps {
   rows?: number;
 }

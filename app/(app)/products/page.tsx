@@ -29,8 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import Loader from "@/components/Loader";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProductsSkeleton } from "@/components/products/products-skeleton";
 
 interface Product {
