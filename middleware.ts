@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  console.log(`[middleware] ${new Date().toISOString()} ${request.nextUrl.pathname}`);
+  // console.log(`[middleware] ${new Date().toISOString()} ${request.nextUrl.pathname}`);
   let response = NextResponse.next({
     request: {
       headers: request.headers,
