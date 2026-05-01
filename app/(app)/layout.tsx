@@ -2,24 +2,22 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { ChatbotWidget } from "@/components/chat/chatbot-widget";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 
 export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
 
-  if (!user) {
+  if (!session?.user) {
     redirect("/login");
   }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar userEmail={user.email ?? null} />
+      <Sidebar userEmail={session?.user.name ?? "User"} />
       <main className="flex-1 overflow-y-auto lg:ml-64">
         <div className="container mx-auto p-6">{children}</div>
       </main>
