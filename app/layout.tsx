@@ -7,7 +7,7 @@ import NextTopLoader from 'nextjs-toploader';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AI Sales Dashboard",
+  title: "AI Sales Chatbot",
   description: "AI-powered sales analytics and forecasting dashboard",
 };
 
