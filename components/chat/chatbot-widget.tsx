@@ -233,11 +233,6 @@ export function ChatbotWidget() {
                     <div className="space-y-4">
                       {/* Welcome message with typewriter effect */}
                       <Message role="assistant" content={displayedWelcome} />
-                      {!welcomeComplete && (
-                        <span className="inline-block animate-pulse text-muted-foreground">
-                          ▍
-                        </span>
-                      )}
 
                       {/* Suggested prompts — appear after welcome finishes typing */}
                       {welcomeComplete && (

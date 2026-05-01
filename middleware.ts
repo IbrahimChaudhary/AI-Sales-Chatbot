@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  console.log(`[middleware] ${new Date().toISOString()} ${request.nextUrl.pathname}`);
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -43,12 +44,15 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for:
-     * - _next/static (static files)
+     * Match all request paths except:
+     * - _next/static (build files)
      * - _next/image (image optimization)
-     * - favicon.ico
-     * - Public image extensions
+     * - _next/data (client-side data prefetch)
+     * - _next/webpack-hmr (dev hot reload)
+     * - favicon, robots, sitemap, manifest
+     * - Image and font files
+     * - API routes that handle their own auth (chat streaming)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|_next/data|_next/webpack-hmr|favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf)$).*)",
   ],
-};
+};;

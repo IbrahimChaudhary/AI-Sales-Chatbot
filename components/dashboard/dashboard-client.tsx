@@ -10,8 +10,8 @@ import {
   getDateRangeParams,
 } from "./date-range-selector";
 import { DollarSign, ShoppingCart, TrendingUp, Package } from "lucide-react";
-import { Loader2 } from "lucide-react";
 import Loader from "../Loader";
+import { DashboardSkeleton } from "./dashboard-skeleton";
 
 interface DashboardData {
   totalRevenue: number;
@@ -80,7 +80,7 @@ export function DashboardClient() {
           Pick a start and end date to see your data.
         </div>
       )}
-      {loading && <Loader />}
+      {loading && <DashboardSkeleton/>}
       {/* Only render dashboard contents when we have data */}
       {data &&
         !loading &&
@@ -132,3 +132,5 @@ export function DashboardClient() {
     </div>
   );
 }
+
+
