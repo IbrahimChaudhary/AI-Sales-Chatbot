@@ -8,6 +8,7 @@ import {
   executeFilteredQuery,
   executeSemanticQuery,
 } from "@/lib/llamaindex/hybrid-query-refactored";
+import { auth } from "@/auth"; // CHANGED: added Auth.js import
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -35,6 +36,16 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     const userMessage = messages[messages.length - 1]?.content || "";
+
+    // CHANGED: auth check using Auth.js (replaces previous lack of auth)
+    const session = await auth();
+    if (!session?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    const userId = session.user.id;
 
     const chatMessages = [
       { role: "system", content: systemPrompt },
@@ -74,7 +85,6 @@ export async function POST(req: Request) {
     const toolCalls = choice?.message?.toolCalls;
 
     if (toolCalls && toolCalls.length > 0) {
-      // AI decided to use the tool - execute filtered query
       console.log("AI decided to call tool - using FILTERED query");
       queryType = "filtered";
 
@@ -83,13 +93,13 @@ export async function POST(req: Request) {
 
       console.log("Tool arguments extracted by AI:", toolArgs);
 
-      // Execute filtered query with AI-extracted parameters
-      dataResult = await executeFilteredQuery(toolArgs);
+      // CHANGED: pass userId as first argument
+      dataResult = await executeFilteredQuery(userId, toolArgs);
       filterDescription = describeToolFilters(toolArgs);
     } else {
-      // AI didn't call tool - use semantic search
       console.log("AI didn't call tool - using SEMANTIC search");
-      dataResult = await executeSemanticQuery(userMessage);
+      // CHANGED: pass userId as first argument
+      dataResult = await executeSemanticQuery(userId, userMessage);
     }
 
     // STEP 3: Build context message with data
@@ -156,7 +166,6 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Stream AI response
           // @ts-ignore
           for await (const chunk of finalCompletion) {
             const text = chunk.choices?.[0]?.delta?.content || "";
@@ -172,7 +181,6 @@ export async function POST(req: Request) {
 
             let chartData: any = null;
 
-            // Priority 1: Regional sales (pie chart)
             if (dataResult.relevantData.regional_sales) {
               chartData = {
                 type: "pie",
@@ -181,9 +189,7 @@ export async function POST(req: Request) {
                   : "Regional Sales Distribution",
                 data: dataResult.relevantData.regional_sales,
               };
-            }
-            // Priority 2: Category breakdown (pie chart)
-            else if (dataResult.relevantData.category_breakdown) {
+            } else if (dataResult.relevantData.category_breakdown) {
               chartData = {
                 type: "pie",
                 title: filterDescription
@@ -191,9 +197,7 @@ export async function POST(req: Request) {
                   : "Sales by Category",
                 data: dataResult.relevantData.category_breakdown,
               };
-            }
-            // Priority 3: Sales trend (line chart)
-            else if (dataResult.relevantData.sales_trend) {
+            } else if (dataResult.relevantData.sales_trend) {
               chartData = {
                 type: "line",
                 title: filterDescription

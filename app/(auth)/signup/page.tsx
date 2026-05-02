@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-// import { seedDataForNewUser } from "@/app/auth/actions";
 import { Loader2 } from "lucide-react";
 import { signupAction } from "@/app/auth/actions";
 import { Input } from "@/components/ui/input";
@@ -25,14 +24,11 @@ export default function SignupPage() {
     setLoading(true);
 
     const formData = new FormData();
-    formData.append("email",email);
-    formData.append("password",password);
-    formData.append("name",name);
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("name", name);
 
-    const result = await signupAction(null,formData);
-
-    //Adding random data for new user.
-    //await seedDataForNewUser();
+    const result = await signupAction(null, formData);
 
     if (!result.ok) {
       setLoading(false);

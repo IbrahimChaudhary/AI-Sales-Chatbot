@@ -17,7 +17,7 @@ const WELCOME_MESSAGE =
   "Hey there! 👋 I'm your sales analytics assistant. I can answer questions about your transactions, products, and trends.";
 
 const SUGGESTED_PROMPTS = [
-  "Sales trends last 6 months",
+  "Total Revenue last 6 months",
   "Top categories?",
   "Show regional breakdown",
 ];

@@ -6,6 +6,7 @@ import { AuthError } from "next-auth";
 import { signIn, signOut as authSignOut } from "@/auth";
 import { connectToDatabase } from "@/lib/mongodb/mongodb";
 import { User } from "@/lib/models/User";
+import { seedSampleDataForUser } from "@/lib/seed/sample-data";
 // import { seedSampleDataForCurrentUser } from "@/lib/seed/sample-data";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -59,11 +60,20 @@ export async function signupAction(
 
     const passwordHash = await bcrypt.hash(password, 12);
 
-    await User.create({
+    const user = await User.create({
       email,
       passwordHash,
       name,
     });
+
+    //Seeding data
+    try {
+  await seedSampleDataForUser(user._id.toString());
+} catch (seedErr) {
+  console.error("[signupAction] Sample data seeding failed:", seedErr);
+  // Intentionally swallow — signup should succeed even if seeding hiccups.
+}
+    
   } catch (err) {
     console.error("[signupAction] User creation failed:", err);
     return { ok: false, error: "Could not create account. Please try again." };

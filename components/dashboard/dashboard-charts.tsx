@@ -139,12 +139,12 @@ export function DashboardCharts({
         <div className="space-y-3 max-h-[300px] overflow-y-auto">
           {transactions.slice(0, 5).map((transaction) => (
             <div
-              key={transaction.id}
+              key={transaction._id}
               className="flex justify-between items-center border-b pb-2"
             >
               <div>
                 <p className="font-medium text-sm">
-                  {transaction.product_name}
+                  {transaction.productName}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {transaction.region} • {transaction.category}
@@ -152,10 +152,10 @@ export function DashboardCharts({
               </div>
               <div className="text-right">
                 <p className="font-semibold">
-                  ${Number(transaction.total_amount).toLocaleString()}
+                  ${Number(transaction.totalAmount).toLocaleString()}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(transaction.transaction_date).toLocaleDateString()}
+                  {new Date(transaction.transactionDate).toLocaleDateString()}
                 </p>
               </div>
             </div>

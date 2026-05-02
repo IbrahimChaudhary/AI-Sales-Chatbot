@@ -16,10 +16,11 @@ export interface HybridQueryResult {
 }
 
 /**
- * Execute filtered query using AI-extracted parameters
- * This is called when the AI invokes the get_sales_data tool
+ * Execute filtered query using AI-extracted parameters.
+ * Called when the AI invokes the get_sales_data tool.
  */
 export async function executeFilteredQuery(
+  userId: string,
   toolArgs: any,
 ): Promise<HybridQueryResult> {
   const relevantData: any = {};
@@ -37,14 +38,11 @@ export async function executeFilteredQuery(
     dataType,
   } = toolArgs;
 
-  // CRITICAL FIX: Convert months to startDate/endDate if not provided
+  // Convert "months" to startDate/endDate if a date range isn't provided
   if (!startDate && !endDate && months) {
     const today = new Date();
-    endDate = today.toISOString().split("T")[0];
     const calculatedStartDate = new Date();
     calculatedStartDate.setMonth(calculatedStartDate.getMonth() - months);
-    startDate = calculatedStartDate.toISOString().split("T")[0];
-
     endDate = toLocalISO(today);
     startDate = toLocalISO(calculatedStartDate);
 
@@ -53,15 +51,23 @@ export async function executeFilteredQuery(
     );
   }
 
+  // Map the AI's snake_case tool argument to the camelCase filter field
+  const filters = {
+    category,
+    region,
+    customerSegment: customer_segment,
+    startDate,
+    endDate,
+  };
+
   try {
-    // Fetch based on dataType or intelligently determine what to fetch
     if (dataType === "trend" || !dataType) {
-      relevantData.sales_trend = await getSalesTrend(category, region, months);
+      relevantData.sales_trend = await getSalesTrend(userId, category, region, months);
       sources.push("sales_trend");
     }
 
     if (dataType === "category_breakdown" || !dataType) {
-      relevantData.category_breakdown = await getCategoryBreakdown({
+      relevantData.category_breakdown = await getCategoryBreakdown(userId, {
         startDate,
         endDate,
       });
@@ -69,7 +75,7 @@ export async function executeFilteredQuery(
     }
 
     if (dataType === "regional_sales") {
-      relevantData.regional_sales = await getRegionalSales({
+      relevantData.regional_sales = await getRegionalSales(userId, {
         startDate,
         endDate,
       });
@@ -77,7 +83,7 @@ export async function executeFilteredQuery(
     }
 
     if (dataType === "total_revenue") {
-      relevantData.total_revenue = await getTotalRevenue({
+      relevantData.total_revenue = await getTotalRevenue(userId, {
         category,
         region,
         startDate,
@@ -88,13 +94,7 @@ export async function executeFilteredQuery(
     }
 
     if (dataType === "transactions") {
-      relevantData.transactions = await getSalesTransactions(undefined, {
-        category,
-        region,
-        customer_segment,
-        startDate,
-        endDate,
-      });
+      relevantData.transactions = await getSalesTransactions(userId, undefined, filters);
       console.log("Transactions count:", relevantData.transactions.length);
       sources.push("transactions");
     }
@@ -120,15 +120,16 @@ function toLocalISO(date: Date): string {
 }
 
 /**
- * Execute semantic search using LlamaIndex
- * This is used for general queries without specific filters
+ * Execute semantic search using LlamaIndex.
+ * Used for general queries without specific filters.
  */
 export async function executeSemanticQuery(
+  userId: string,
   userQuery: string,
 ): Promise<HybridQueryResult> {
   console.log("Executing semantic query with LlamaIndex");
 
-  const llamaResult = await querySalesData(userQuery);
+  const llamaResult = await querySalesData(userId, userQuery);
   console.log("LLama Result:", llamaResult);
   if (!llamaResult) {
     throw new Error("Semantic query returned no results");

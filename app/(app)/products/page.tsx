@@ -29,16 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import Loader from "@/components/Loader";
 import { Skeleton } from "@/components/ui/skeleton";
-
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  created_at: string;
-}
+import { Product } from "@/lib/types/database";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -103,7 +95,7 @@ export default function ProductsPage() {
       const method = editingProduct ? "PUT" : "POST";
       const body = editingProduct
         ? {
-            id: editingProduct.id,
+            id: editingProduct._id,
             ...formData,
             price: parseFloat(formData.price),
           }
@@ -133,7 +125,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
     try {
@@ -187,12 +179,12 @@ export default function ProductsPage() {
             </TableHeader>
             <TableBody>
               {products.map((product) => (
-                <TableRow key={product.id}>
+                <TableRow key={product._id}>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{product.category}</TableCell>
                   <TableCell>${product.price.toFixed(2)}</TableCell>
                   <TableCell>
-                    {new Date(product.created_at).toLocaleDateString()}
+                    {new Date(product.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -205,7 +197,7 @@ export default function ProductsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(product.id)}
+                      onClick={() => handleDelete(product._id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
