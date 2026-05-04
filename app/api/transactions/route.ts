@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    console.log(body);
     const parsed = TransactionCreateSchema.safeParse(body);
 
     if (!parsed.success) {

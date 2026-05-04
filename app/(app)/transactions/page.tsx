@@ -30,10 +30,8 @@ import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Product, SalesTransaction } from "@/lib/types/database";
 import { TransactionsSkeleton } from "@/components/transactions/transactions-skeleton";
-
 
 const SEGMENTS = ["Enterprise", "SMB", "Individual", "Education"];
 const REGIONS = ["North America", "Europe", "Asia Pacific", "Latin America"];
@@ -48,21 +46,21 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Form state — note product_id replaces product_name as the source of truth
+  // Form state — note productId replaces productName as the source of truth
   const [formData, setFormData] = useState({
-    transaction_date: "",
-    product_id: "",
+    transactionDate: "",
+    productId: "",
     quantity: "",
-    unit_price: "",
-    customer_segment: "",
+    unitPrice: "",
+    customerSegment: "",
     region: "",
   });
 
   const { toast } = useToast();
 
-  // Derive selected product from product_id (avoids storing redundant state)
+  // Derive selected product from productId (avoids storing redundant state)
   const selectedProduct = products.find(
-    (p) => p._id.toString() === formData.product_id,
+    (p) => p._id.toString() === formData.productId,
   );
 
   useEffect(() => {
@@ -111,22 +109,28 @@ export default function TransactionsPage() {
   const handleOpenDialog = (transaction?: SalesTransaction) => {
     if (transaction) {
       setEditingTransaction(transaction);
+      // transactionDate from the API is an ISO string. Date inputs want YYYY-MM-DD.
+      const dateStr =
+        typeof transaction.transactionDate === "string"
+          ? transaction.transactionDate.slice(0, 10)
+          : new Date(transaction.transactionDate).toISOString().slice(0, 10);
+
       setFormData({
-        transaction_date: transaction.transactionDate,
-        product_id: transaction.productId?.toString() ?? "",
+        transactionDate: dateStr,
+        productId: transaction.productId?.toString() ?? "",
         quantity: transaction.quantity.toString(),
-        unit_price: transaction.unitPrice.toString(),
-        customer_segment: transaction.customerSegment,
+        unitPrice: transaction.unitPrice.toString(),
+        customerSegment: transaction.customerSegment,
         region: transaction.region,
       });
     } else {
       setEditingTransaction(null);
       setFormData({
-        transaction_date: new Date().toISOString().split("T")[0],
-        product_id: "",
+        transactionDate: new Date().toISOString().split("T")[0],
+        productId: "",
         quantity: "",
-        unit_price: "",
-        customer_segment: "",
+        unitPrice: "",
+        customerSegment: "",
         region: "",
       });
     }
@@ -140,17 +144,16 @@ export default function TransactionsPage() {
 
   // When the product changes, auto-fill price (but only for new transactions —
   // leave existing transactions alone so users can preserve historical prices)
-  const handleProductChange = (product_id: string) => {
-    const product = products.find((p) => p._id.toString() === product_id);
+  const handleProductChange = (productId: string) => {
+    const product = products.find((p) => p._id.toString() === productId);
 
     setFormData((prev) => ({
       ...prev,
-      product_id,
-      // Auto-fill price only if not already set or we're creating a new transaction
-      unit_price:
+      productId,
+      unitPrice:
         product && !editingTransaction
           ? product.price.toString()
-          : prev.unit_price,
+          : prev.unitPrice,
     }));
   };
 
@@ -171,13 +174,13 @@ export default function TransactionsPage() {
       const method = editingTransaction ? "PUT" : "POST";
       const body = {
         ...(editingTransaction && { id: editingTransaction._id }),
-        transaction_date: formData.transaction_date,
-        product_id: selectedProduct._id,
-        product_name: selectedProduct.name,
+        transactionDate: formData.transactionDate,
+        productId: selectedProduct._id,
+        productName: selectedProduct.name,
         category: selectedProduct.category,
         quantity: parseInt(formData.quantity),
-        unit_price: parseFloat(formData.unit_price),
-        customer_segment: formData.customer_segment,
+        unitPrice: parseFloat(formData.unitPrice),
+        customerSegment: formData.customerSegment,
         region: formData.region,
       };
 
@@ -278,18 +281,14 @@ export default function TransactionsPage() {
                 {transactions.map((transaction) => (
                   <TableRow key={transaction._id}>
                     <TableCell>
-                      {new Date(
-                        transaction.transactionDate,
-                      ).toLocaleDateString()}
+                      {new Date(transaction.transactionDate).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="font-medium">
                       {transaction.productName}
                     </TableCell>
                     <TableCell>{transaction.category}</TableCell>
                     <TableCell>{transaction.quantity}</TableCell>
-                    <TableCell>
-                      ${transaction.totalAmount.toFixed(2)}
-                    </TableCell>
+                    <TableCell>${transaction.totalAmount.toFixed(2)}</TableCell>
                     <TableCell>{transaction.customerSegment}</TableCell>
                     <TableCell>{transaction.region}</TableCell>
                     <TableCell className="text-right">
@@ -352,15 +351,15 @@ export default function TransactionsPage() {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="transaction_date">Date</Label>
+                <Label htmlFor="transactionDate">Date</Label>
                 <Input
-                  id="transaction_date"
+                  id="transactionDate"
                   type="date"
-                  value={formData.transaction_date}
+                  value={formData.transactionDate}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      transaction_date: e.target.value,
+                      transactionDate: e.target.value,
                     })
                   }
                   required
@@ -370,7 +369,7 @@ export default function TransactionsPage() {
               <div className="space-y-2">
                 <Label htmlFor="product">Product</Label>
                 <Select
-                  value={formData.product_id}
+                  value={formData.productId}
                   onValueChange={handleProductChange}
                   required
                 >
@@ -415,30 +414,30 @@ export default function TransactionsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="unit_price">Unit Price</Label>
+                <Label htmlFor="unitPrice">Unit Price</Label>
                 <Input
-                  id="unit_price"
+                  id="unitPrice"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.unit_price}
+                  value={formData.unitPrice}
                   onChange={(e) =>
-                    setFormData({ ...formData, unit_price: e.target.value })
+                    setFormData({ ...formData, unitPrice: e.target.value })
                   }
                   required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="customer_segment">Customer Segment</Label>
+                <Label htmlFor="customerSegment">Customer Segment</Label>
                 <Select
-                  value={formData.customer_segment}
+                  value={formData.customerSegment}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, customer_segment: value })
+                    setFormData({ ...formData, customerSegment: value })
                   }
                   required
                 >
-                  <SelectTrigger id="customer_segment">
+                  <SelectTrigger id="customerSegment">
                     <SelectValue placeholder="Select segment" />
                   </SelectTrigger>
                   <SelectContent>
