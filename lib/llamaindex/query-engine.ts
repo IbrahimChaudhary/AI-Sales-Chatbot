@@ -137,7 +137,7 @@ export async function querySalesData(userId: string, query: string) {
     const relevantData: Record<string, unknown> = {};
     const sources: string[] = [];
 
-    for (const type of matchedTypes) {
+    for (const type of Array.from(matchedTypes)) {
       if (type === "sales_trend") {
         relevantData.sales_trend = await getSalesTrend(userId, undefined, undefined, 12);
         sources.push("sales_trend");

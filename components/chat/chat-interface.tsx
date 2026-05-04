@@ -35,7 +35,7 @@ export function ChatInterface() {
     if (!input.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       role: "user",
       content: input,
     };
@@ -48,9 +48,7 @@ export function ChatInterface() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: newMessages.map((m) => ({
             role: m.role,
@@ -66,55 +64,82 @@ export function ChatInterface() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let assistantMessage = "";
-      const assistantMessageId = (Date.now() + 1).toString();
+      const assistantMessageId = crypto.randomUUID();
+      let buffer = "";
 
       if (reader) {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          // Append the new chunk to whatever was leftover from last time
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split into lines, but keep the last (potentially incomplete) line in the buffer
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (line.startsWith("0:")) {
-              // Extract content after "0:" prefix
-              let content = line.substring(2);
+            if (!line.startsWith("0:")) continue;
 
+            const payload = line.slice(2);
+            let content: string;
 
-              // Try to parse as JSON to handle escaped characters
-              try {
-                content = JSON.parse(content);
-              } catch (e) {
-                // If parsing fails (incomplete chunk), strip outer quotes and unescape
-                if (content.startsWith('"')) {
-                  content = content.substring(1);
-                }
-                if (content.endsWith('"')) {
-                  content = content.substring(0, content.length - 1);
-                }
-                // Unescape patterns - order matters!
-                content = content
-                  .replace(/\\n/g, '\n')
-                  .replace(/\\"/g, '"')
-                  .replace(/\\`/g, '`')  // Unescape backticks
-                  .replace(/\\\\/g, '\\');
+            try {
+              content = JSON.parse(payload);
+            } catch {
+              // Malformed line — skip it rather than producing garbled output
+              console.warn("Skipping unparseable chunk:", payload);
+              continue;
+            }
+
+            assistantMessage += content;
+
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.id === assistantMessageId) {
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, content: assistantMessage },
+                ];
               }
-
-              assistantMessage += content;
-
-              setMessages((prev) => {
-                const withoutLast = prev.filter((m) => m.id !== assistantMessageId);
-                const newMessage = {
+              return [
+                ...prev,
+                {
                   id: assistantMessageId,
                   role: "assistant" as const,
                   content: assistantMessage,
-                };
+                },
+              ];
+            });
+          }
+        }
 
-
-                return [...withoutLast, newMessage];
-              });
-            }
+        // Flush any remaining complete line in the buffer at end of stream
+        if (buffer.startsWith("0:")) {
+          const payload = buffer.slice(2);
+          try {
+            const content = JSON.parse(payload);
+            assistantMessage += content;
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.id === assistantMessageId) {
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, content: assistantMessage },
+                ];
+              }
+              return [
+                ...prev,
+                {
+                  id: assistantMessageId,
+                  role: "assistant" as const,
+                  content: assistantMessage,
+                },
+              ];
+            });
+          } catch {
+            console.warn("Skipping final unparseable chunk:", buffer);
           }
         }
       }
@@ -123,7 +148,7 @@ export function ChatInterface() {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
+          id: crypto.randomUUID(),
           role: "assistant",
           content: "Sorry, I encountered an error. Please try again.",
         },
@@ -139,7 +164,8 @@ export function ChatInterface() {
       <div className="mb-4">
         <h1 className="text-3xl font-bold">AI Sales Analyst</h1>
         <p className="text-muted-foreground">
-          Ask questions about sales data, request forecasts, or create visualizations
+          Ask questions about sales data, request forecasts, or create
+          visualizations
         </p>
       </div>
 
@@ -161,7 +187,11 @@ export function ChatInterface() {
         ) : (
           <>
             {messages.map((message) => (
-              <Message key={message.id} role={message.role} content={message.content} />
+              <Message
+                key={message.id}
+                role={message.role}
+                content={message.content}
+              />
             ))}
             {isLoading && (
               <div className="flex items-center gap-2 text-muted-foreground p-4">

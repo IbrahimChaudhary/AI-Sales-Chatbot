@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { ChatbotWidget } from "@/components/chat/chatbot-widget";
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
