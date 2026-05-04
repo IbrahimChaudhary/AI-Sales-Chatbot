@@ -32,6 +32,11 @@ When users ask GENERAL questions (e.g., "What are my best products?"), I will pr
 CHART GENERATION:
 Charts are AUTOMATICALLY generated when users request visualizations. Keep your text response VERY BRIEF (1-2 sentences).`;
 
+function stripCodeBlocks(text: string): string {
+  // Remove all ```...``` fenced blocks (chart, json, anything)
+  return text.replace(/```[\s\S]*?```/g, "").trim();
+}
+
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
@@ -46,11 +51,6 @@ export async function POST(req: Request) {
       });
     }
     const userId = session.user.id;
-
-    function stripCodeBlocks(text: string): string {
-      // Remove all ```...``` fenced blocks (chart, json, anything)
-      return text.replace(/```[\s\S]*?```/g, "").trim();
-    }
 
     const chatMessages = [
       { role: "system", content: systemPrompt },
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
       contextMessage +=
         "Use specific numbers from the data when relevant, but format them as prose, not as code or tables.\n";
     }
-    
+
     // STEP 4: Send data back to AI for final response (with streaming)
     const finalMessages = [
       ...chatMessages,
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
         content: contextMessage,
       },
     ];
-    
+
     // @ts-ignore
     const finalCompletion = await openrouter.chat.send({
       chatGenerationParams: {
@@ -183,8 +183,6 @@ export async function POST(req: Request) {
         stream: true,
       },
     });
-
-    
 
     // STEP 5: Stream the response
     const encoder = new TextEncoder();
