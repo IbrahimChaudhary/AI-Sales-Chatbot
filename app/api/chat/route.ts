@@ -8,6 +8,7 @@ import {
   executeFilteredQuery,
   executeSemanticQuery,
 } from "@/lib/llamaindex/hybrid-query-refactored";
+import { auth } from "@/auth"; // CHANGED: added Auth.js import
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -31,16 +32,34 @@ When users ask GENERAL questions (e.g., "What are my best products?"), I will pr
 CHART GENERATION:
 Charts are AUTOMATICALLY generated when users request visualizations. Keep your text response VERY BRIEF (1-2 sentences).`;
 
+function stripCodeBlocks(text: string): string {
+  // Remove all ```...``` fenced blocks (chart, json, anything)
+  return text.replace(/```[\s\S]*?```/g, "").trim();
+}
+
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     const userMessage = messages[messages.length - 1]?.content || "";
 
+    // CHANGED: auth check using Auth.js (replaces previous lack of auth)
+    const session = await auth();
+    if (!session?.user?.id) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    const userId = session.user.id;
+
     const chatMessages = [
       { role: "system", content: systemPrompt },
       ...messages.slice(0, -1).map((msg: any) => ({
         role: msg.role,
-        content: msg.content,
+        // Strip code fences from assistant messages so prior chart blocks
+        // don't pollute the AI's context and get imitated next turn.
+        content:
+          msg.role === "assistant" ? stripCodeBlocks(msg.content) : msg.content,
       })),
       {
         role: "user",
@@ -74,7 +93,6 @@ export async function POST(req: Request) {
     const toolCalls = choice?.message?.toolCalls;
 
     if (toolCalls && toolCalls.length > 0) {
-      // AI decided to use the tool - execute filtered query
       console.log("AI decided to call tool - using FILTERED query");
       queryType = "filtered";
 
@@ -83,13 +101,13 @@ export async function POST(req: Request) {
 
       console.log("Tool arguments extracted by AI:", toolArgs);
 
-      // Execute filtered query with AI-extracted parameters
-      dataResult = await executeFilteredQuery(toolArgs);
+      // CHANGED: pass userId as first argument
+      dataResult = await executeFilteredQuery(userId, toolArgs);
       filterDescription = describeToolFilters(toolArgs);
     } else {
-      // AI didn't call tool - use semantic search
       console.log("AI didn't call tool - using SEMANTIC search");
-      dataResult = await executeSemanticQuery(userMessage);
+      // CHANGED: pass userId as first argument
+      dataResult = await executeSemanticQuery(userId, userMessage);
     }
 
     // STEP 3: Build context message with data
@@ -111,7 +129,11 @@ export async function POST(req: Request) {
     if (isChartRequest) {
       contextMessage += "=== CRITICAL INSTRUCTIONS ===\n";
       contextMessage +=
-        "A chart is being AUTOMATICALLY generated. DO NOT describe the chart or data.\n\n";
+        "A chart is being AUTOMATICALLY generated and appended to your response by the system.\n";
+      contextMessage +=
+        "You MUST NOT generate any chart, code block, or fenced markdown of your own.\n";
+      contextMessage +=
+        "If you write ``` anywhere in your response, the user will see DUPLICATE charts. Do not do this.\n\n";
       contextMessage += "Your response MUST:\n";
       contextMessage += "- Be 1-2 sentences MAXIMUM\n";
       contextMessage += "- Give ONLY high-level business insight\n";
@@ -128,7 +150,19 @@ export async function POST(req: Request) {
       contextMessage +=
         "BAD: 'March 2025 had revenue of $461300' or '```chart' or any technical details.\n";
     } else {
-      contextMessage += "Analyze this data and provide insights.";
+      contextMessage += "=== INSTRUCTIONS ===\n";
+      contextMessage +=
+        "Analyze this data and provide insights in plain conversational English.\n\n";
+      contextMessage += "Your response MUST NOT include:\n";
+      contextMessage +=
+        "- JSON, code blocks, or fenced markdown (no ```json, ```chart, ```bar)\n";
+      contextMessage +=
+        "- Chart specifications (chart_type, xKey, yKey, data arrays)\n";
+      contextMessage += "- Raw structured data\n\n";
+      contextMessage +=
+        "If the user wants a visualization, they can ask for a 'chart' or 'graph' explicitly.\n";
+      contextMessage +=
+        "Use specific numbers from the data when relevant, but format them as prose, not as code or tables.\n";
     }
 
     // STEP 4: Send data back to AI for final response (with streaming)
@@ -139,6 +173,7 @@ export async function POST(req: Request) {
         content: contextMessage,
       },
     ];
+
     // @ts-ignore
     const finalCompletion = await openrouter.chat.send({
       chatGenerationParams: {
@@ -156,13 +191,12 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Stream AI response
           // @ts-ignore
           for await (const chunk of finalCompletion) {
             const text = chunk.choices?.[0]?.delta?.content || "";
             if (text) {
               fullResponse += text;
-              controller.enqueue(encoder.encode(`0:"${text}"\n`));
+              controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
             }
           }
 
@@ -172,7 +206,6 @@ export async function POST(req: Request) {
 
             let chartData: any = null;
 
-            // Priority 1: Regional sales (pie chart)
             if (dataResult.relevantData.regional_sales) {
               chartData = {
                 type: "pie",
@@ -181,9 +214,7 @@ export async function POST(req: Request) {
                   : "Regional Sales Distribution",
                 data: dataResult.relevantData.regional_sales,
               };
-            }
-            // Priority 2: Category breakdown (pie chart)
-            else if (dataResult.relevantData.category_breakdown) {
+            } else if (dataResult.relevantData.category_breakdown) {
               chartData = {
                 type: "pie",
                 title: filterDescription
@@ -191,9 +222,7 @@ export async function POST(req: Request) {
                   : "Sales by Category",
                 data: dataResult.relevantData.category_breakdown,
               };
-            }
-            // Priority 3: Sales trend (line chart)
-            else if (dataResult.relevantData.sales_trend) {
+            } else if (dataResult.relevantData.sales_trend) {
               chartData = {
                 type: "line",
                 title: filterDescription
@@ -222,7 +251,6 @@ export async function POST(req: Request) {
         }
       },
     });
-
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",

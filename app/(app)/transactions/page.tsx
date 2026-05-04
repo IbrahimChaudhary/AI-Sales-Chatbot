@@ -29,39 +29,22 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import Loader from "@/components/Loader";
 import Link from "next/link";
-import { TransactionsSkeleton } from "@/components/transactions/transactions-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Product, SalesTransaction } from "@/lib/types/database";
 
-interface Transaction {
-  id: number;
-  transaction_date: string;
-  product_id?: number;
-  product_name: string;
-  category: string;
-  quantity: number;
-  unit_price: number;
-  total_amount: number;
-  customer_segment: string;
-  region: string;
-}
-
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-}
 
 const SEGMENTS = ["Enterprise", "SMB", "Individual", "Education"];
 const REGIONS = ["North America", "Europe", "Asia Pacific", "Latin America"];
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<SalesTransaction[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
-    useState<Transaction | null>(null);
+    useState<SalesTransaction | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -79,7 +62,7 @@ export default function TransactionsPage() {
 
   // Derive selected product from product_id (avoids storing redundant state)
   const selectedProduct = products.find(
-    (p) => p.id.toString() === formData.product_id,
+    (p) => p._id.toString() === formData.product_id,
   );
 
   useEffect(() => {
@@ -125,15 +108,15 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleOpenDialog = (transaction?: Transaction) => {
+  const handleOpenDialog = (transaction?: SalesTransaction) => {
     if (transaction) {
       setEditingTransaction(transaction);
       setFormData({
-        transaction_date: transaction.transaction_date,
-        product_id: transaction.product_id?.toString() ?? "",
+        transaction_date: transaction.transactionDate,
+        product_id: transaction.productId?.toString() ?? "",
         quantity: transaction.quantity.toString(),
-        unit_price: transaction.unit_price.toString(),
-        customer_segment: transaction.customer_segment,
+        unit_price: transaction.unitPrice.toString(),
+        customer_segment: transaction.customerSegment,
         region: transaction.region,
       });
     } else {
@@ -158,7 +141,7 @@ export default function TransactionsPage() {
   // When the product changes, auto-fill price (but only for new transactions —
   // leave existing transactions alone so users can preserve historical prices)
   const handleProductChange = (product_id: string) => {
-    const product = products.find((p) => p.id.toString() === product_id);
+    const product = products.find((p) => p._id.toString() === product_id);
 
     setFormData((prev) => ({
       ...prev,
@@ -187,9 +170,9 @@ export default function TransactionsPage() {
       const url = "/api/transactions";
       const method = editingTransaction ? "PUT" : "POST";
       const body = {
-        ...(editingTransaction && { id: editingTransaction.id }),
+        ...(editingTransaction && { id: editingTransaction._id }),
         transaction_date: formData.transaction_date,
-        product_id: selectedProduct.id,
+        product_id: selectedProduct._id,
         product_name: selectedProduct.name,
         category: selectedProduct.category,
         quantity: parseInt(formData.quantity),
@@ -222,7 +205,7 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this transaction?")) return;
 
     try {
@@ -293,21 +276,21 @@ export default function TransactionsPage() {
               </TableHeader>
               <TableBody>
                 {transactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
+                  <TableRow key={transaction._id}>
                     <TableCell>
                       {new Date(
-                        transaction.transaction_date,
+                        transaction.transactionDate,
                       ).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {transaction.product_name}
+                      {transaction.productName}
                     </TableCell>
                     <TableCell>{transaction.category}</TableCell>
                     <TableCell>{transaction.quantity}</TableCell>
                     <TableCell>
-                      ${transaction.total_amount.toFixed(2)}
+                      ${transaction.totalAmount.toFixed(2)}
                     </TableCell>
-                    <TableCell>{transaction.customer_segment}</TableCell>
+                    <TableCell>{transaction.customerSegment}</TableCell>
                     <TableCell>{transaction.region}</TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -320,7 +303,7 @@ export default function TransactionsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(transaction.id)}
+                        onClick={() => handleDelete(transaction._id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -397,8 +380,8 @@ export default function TransactionsPage() {
                   <SelectContent>
                     {products.map((product) => (
                       <SelectItem
-                        key={product.id}
-                        value={product.id.toString()}
+                        key={product._id}
+                        value={product._id.toString()}
                       >
                         {product.name}
                       </SelectItem>
@@ -510,3 +493,70 @@ export default function TransactionsPage() {
   );
 }
 
+{/* Transaction Skeleton */}
+interface TransactionsSkeletonProps {
+  rows?: number;
+}
+
+export function TransactionsSkeleton({ rows = 8 }: TransactionsSkeletonProps) {
+  return (
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Product</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Quantity</TableHead>
+            <TableHead>Total</TableHead>
+            <TableHead>Segment</TableHead>
+            <TableHead>Region</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: rows }).map((_, i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-32" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-8" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-24" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {/* Pagination footer skeleton */}
+      <div className="flex items-center justify-between p-4 border-t">
+        <Skeleton className="h-4 w-24" />
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-20" />
+        </div>
+      </div>
+    </>
+  );
+}

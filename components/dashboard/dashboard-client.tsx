@@ -10,7 +10,6 @@ import {
   getDateRangeParams,
 } from "./date-range-selector";
 import { DollarSign, ShoppingCart, TrendingUp, Package } from "lucide-react";
-import Loader from "../Loader";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 
 interface DashboardData {

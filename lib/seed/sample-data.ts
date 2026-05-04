@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { connectToDatabase } from "@/lib/mongodb/mongodb";
+import { Product } from "@/lib/models/Product";
+import { Transaction } from "@/lib/models/Transaction";
 
 const PRODUCT_CATALOG = [
   { name: "Wireless Headphones", category: "Electronics", price: 129.99 },
@@ -29,98 +31,81 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function randomDateInLastMonths(months: number): string {
+function randomDateInLastMonths(months: number): Date {
   const now = new Date();
   const past = new Date();
   past.setMonth(now.getMonth() - months);
   const randomTimestamp =
     past.getTime() + Math.random() * (now.getTime() - past.getTime());
-  return new Date(randomTimestamp).toISOString().split("T")[0];
+  return new Date(randomTimestamp);
 }
 
-// Pick N random items from an array (no duplicates)
 function pickRandomSubset<T>(items: T[], count: number): T[] {
   const shuffled = [...items].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
 
-export async function seedSampleDataForCurrentUser() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    throw new Error("Not authenticated");
-  }
+/**
+ * Seed sample data for a freshly-created user.
+ * Caller must pass a verified user id — this function does NOT check auth.
+ *
+ * Idempotency note: if called twice for the same user, you'll get duplicate
+ * data. The signup flow should guarantee single-call semantics.
+ */
+export async function seedSampleDataForUser(userId: string) {
+  await connectToDatabase();
 
   // Step 1: Pick a random subset of products for this user
-  // Each user gets between 5 and 10 products from the catalog of 15
   const productCount = randomInt(5, 10);
   const selectedProducts = pickRandomSubset(PRODUCT_CATALOG, productCount);
 
-  const productsToInsert = selectedProducts.map((p) => ({
+  const productDocs = selectedProducts.map((p) => ({
     ...p,
-    user_id: user.id,
+    userId,
   }));
 
-  const { data: insertedProducts, error: productsError } = await supabase
-    .from("products")
-    .insert(productsToInsert)
-    .select();
+  const insertedProducts = await Product.insertMany(productDocs, {
+    ordered: true,
+  });
 
-  if (productsError) {
-    throw new Error(`Failed to seed products: ${productsError.message}`);
-  }
-
-  if (!insertedProducts || insertedProducts.length === 0) {
+  if (insertedProducts.length === 0) {
     throw new Error("No products were inserted");
   }
 
-  // Step 2: Generate a random number of transactions (200–1000) over a random
-  // time window (6–18 months), referencing only this user's products
+  // Step 2: Generate a random number of transactions referencing this user's products
   const transactionCount = randomInt(200, 1000);
-  const monthsBack = randomInt(6, 18);
+  const monthsBack = randomInt(20, 24);
 
-  const transactionsToInsert = Array.from({ length: transactionCount }, () => {
+  const transactionDocs = Array.from({ length: transactionCount }, () => {
     const product = pickRandom(insertedProducts);
     const quantity = randomInt(1, 10);
-    const unit_price = Number(product.price);
+    const unitPrice = product.price;
 
     return {
-      user_id: user.id,
-      transaction_date: randomDateInLastMonths(monthsBack),
-      product_id: product.id,
-      product_name: product.name,
+      userId,
+      transactionDate: randomDateInLastMonths(monthsBack),
+      productId: product._id,
+      productName: product.name,
       category: product.category,
       quantity,
-      unit_price,
-      total_amount: Number((quantity * unit_price).toFixed(2)),
-      customer_segment: pickRandom(CUSTOMER_SEGMENTS),
+      unitPrice,
+      totalAmount: Number((quantity * unitPrice).toFixed(2)),
+      customerSegment: pickRandom(CUSTOMER_SEGMENTS),
       region: pickRandom(REGIONS),
     };
   });
 
-  // Insert in chunks of 100 to stay well under request size limits
-  const CHUNK_SIZE = 100;
-  for (let i = 0; i < transactionsToInsert.length; i += CHUNK_SIZE) {
-    const chunk = transactionsToInsert.slice(i, i + CHUNK_SIZE);
-    const { error: transactionsError } = await supabase
-      .from("sales_transactions")
-      .insert(chunk);
-
-    if (transactionsError) {
-      throw new Error(
-        `Failed to seed transactions: ${transactionsError.message}`,
-      );
-    }
+  // Insert in chunks to stay under MongoDB's BSON document size limits
+  // and to avoid blocking the event loop on a single huge insert
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < transactionDocs.length; i += CHUNK_SIZE) {
+    const chunk = transactionDocs.slice(i, i + CHUNK_SIZE);
+    await Transaction.insertMany(chunk, { ordered: true });
   }
 
   return {
     productsCount: insertedProducts.length,
-    transactionsCount: transactionsToInsert.length,
+    transactionsCount: transactionDocs.length,
     monthsBack,
   };
 }

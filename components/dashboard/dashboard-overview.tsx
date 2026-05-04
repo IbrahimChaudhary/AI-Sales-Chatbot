@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { MetricCard } from "./metric-card";
 import { DashboardCharts } from "./dashboard-charts";
 import { DollarSign, ShoppingCart, TrendingUp, Package } from "lucide-react";
@@ -7,30 +9,64 @@ import {
   getCategoryBreakdown,
   getRegionalSales,
   getSalesTrend,
+  getTransactionCount,
 } from "@/lib/database/queries";
+import { SalesTransaction } from "@/lib/types/database";
 
 export async function DashboardOverview() {
-  // Fetch all dashboard data
-  const [totalRevenue, transactions, categoryData, regionalData, trendData] =
-    await Promise.all([
-      getTotalRevenue(),
-      getSalesTransactions(10),
-      getCategoryBreakdown(),
-      getRegionalSales(),
-      getSalesTrend(undefined, undefined, 6),
-    ]);
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+  const userId = session.user.id;
 
-  const transactionCount = transactions.length;
+  // Fetch all dashboard data in parallel
+  const [
+    totalRevenue,
+    transactionCount,
+    transactions,
+    categoryData,
+    regionalData,
+    trendData,
+  ] = await Promise.all([
+    getTotalRevenue(userId),
+    getTransactionCount(userId),
+    getSalesTransactions(userId, 10),
+    getCategoryBreakdown(userId),
+    getRegionalSales(userId),
+    getSalesTrend(userId, undefined, undefined, 6),
+  ]);
+
+  function serializeTransactions(
+  transactions: Awaited<ReturnType<typeof getSalesTransactions>>
+): SalesTransaction[] {
+  return transactions.map((t) => ({
+    _id: t._id.toString(),
+    userId: t.userId.toString(),
+    transactionDate: t.transactionDate.toISOString(),
+    productId: t.productId ? t.productId.toString() : null,
+    productName: t.productName,
+    category: t.category,
+    quantity: t.quantity,
+    unitPrice: t.unitPrice,
+    totalAmount: t.totalAmount,
+    customerSegment: t.customerSegment,
+    region: t.region,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  }));
+}
+
   const avgOrderValue =
     transactionCount > 0 ? totalRevenue / transactionCount : 0;
 
-  // Format trend data for chart
+  // Format trend data for the chart — month label + per-month revenue
   const formattedTrendData = trendData.map((item) => ({
-    month: new Date(item.month).toLocaleDateString("en-US", {
+    month: item.month.toLocaleDateString("en-US", {
       month: "short",
       year: "2-digit",
     }),
-    revenue: parseFloat(totalRevenue),
+    revenue: item.revenue,
   }));
 
   return (
@@ -40,7 +76,7 @@ export async function DashboardOverview() {
         <MetricCard
           title="Total Revenue"
           value={
-            totalRevenue >= 1_00_000
+            totalRevenue >= 1_000_000
               ? `$${(totalRevenue / 1_000_000).toFixed(2)}M`
               : totalRevenue >= 1_000
                 ? `$${(totalRevenue / 1_000).toFixed(1)}K`
@@ -53,7 +89,7 @@ export async function DashboardOverview() {
           title="Transactions"
           value={transactionCount.toLocaleString()}
           icon={ShoppingCart}
-          description="Recent transactions"
+          description="Total transactions"
         />
         <MetricCard
           title="Avg Order Value"
@@ -74,7 +110,7 @@ export async function DashboardOverview() {
         trendData={formattedTrendData}
         categoryData={categoryData}
         regionalData={regionalData}
-        transactions={transactions}
+        transactions={serializeTransactions(transactions)}
       />
     </div>
   );

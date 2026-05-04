@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
+import { loginAction } from "@/app/auth/actions";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,14 +22,15 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const formData = new FormData();
+    formData.append("email",email);
+    formData.append("password",password);
 
-    if (error) {
+    const result = await loginAction(null,formData);
+
+    if (!result.ok) {
       setLoading(false);
-      setError(error.message);
+      setError(result?.error);
       return;
     }
 
@@ -48,38 +51,38 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
+            <Label htmlFor="email" className="text-sm font-medium">
               Email
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full rounded-md border border-Input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="you@example.com"
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
+            <Label htmlFor="password" className="text-sm font-medium">
               Password
-            </label>
-            <input
+            </Label>
+            <Input
               id="password"
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full rounded-md border border-Input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="Your password"
             />
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -92,7 +95,7 @@ export default function LoginPage() {
             ) : (
               "Log in"
             )}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground">

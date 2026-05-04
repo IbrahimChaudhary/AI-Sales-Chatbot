@@ -1,250 +1,286 @@
-import { createClient } from "@/lib/supabase/server";
-import type {
-  SalesTransaction,
-  SalesTrend,
-  SalesSummary,
-} from "@/lib/types/database";
+import mongoose from "mongoose";
+import { connectToDatabase } from "@/lib/mongodb/mongodb";
+import { Transaction } from "@/lib/models/Transaction";
+
+// ──────────────────────────────────────────────────────────────────────────
+// Shared filter type
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface SalesFilters {
+  category?: string;
+  region?: string;
+  customerSegment?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// Builds the $match stage shared across every query.
+// Every aggregation MUST start with this so userId scoping is enforced.
+function buildMatchStage(userId: string, filters?: SalesFilters) {
+  const match: Record<string, unknown> = {
+    userId: new mongoose.Types.ObjectId(userId),
+  };
+
+  if (filters?.category) match.category = filters.category;
+  if (filters?.region) match.region = filters.region;
+  if (filters?.customerSegment) match.customerSegment = filters.customerSegment;
+
+  if (filters?.startDate || filters?.endDate) {
+    const dateFilter: Record<string, Date> = {};
+
+    if (filters.startDate) {
+      // Start of day
+      dateFilter.$gte = new Date(filters.startDate);
+    }
+
+    if (filters.endDate) {
+      // End of day — push to 23:59:59.999 so we capture the entire day
+      const end = new Date(filters.endDate);
+      end.setUTCHours(23, 59, 59, 999);
+      dateFilter.$lte = end;
+    }
+
+    match.transactionDate = dateFilter;
+  }
+
+  return match;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Sales transactions list
+// ──────────────────────────────────────────────────────────────────────────
 
 export async function getSalesTransactions(
+  userId: string,
   limit?: number,
-  filters?: {
-    category?: string;
-    region?: string;
-    customer_segment?: string;
-    startDate?: string;
-    endDate?: string;
-  },
+  filters?: SalesFilters
 ) {
-  const supabase = await createClient();
+  await connectToDatabase();
 
-  let query = supabase
-    .from("sales_transactions")
-    .select("*")
-    .order("transaction_date", { ascending: false });
+  const match = buildMatchStage(userId, filters);
 
+  let query = Transaction.find(match).sort({ transactionDate: -1 });
   if (limit !== undefined) {
     query = query.limit(limit);
   }
 
-  if (filters?.category) {
-    query = query.eq("category", filters.category);
-  }
-  if (filters?.region) {
-    query = query.eq("region", filters.region);
-  }
-  if (filters?.customer_segment) {
-    query = query.eq("customer_segment", filters.customer_segment);
-  }
-  if (filters?.startDate) {
-    query = query.gte("transaction_date", filters.startDate);
-  }
-  if (filters?.endDate) {
-    query = query.lte("transaction_date", filters.endDate);
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw error;
-  return data as SalesTransaction[];
+  return query.lean();
 }
-// Helper to keep the filter logic in one place
-function applyFilters(
-  query: any,
-  filters?: {
-    category?: string;
-    region?: string;
-    customer_segment?: string;
-    startDate?: string;
-    endDate?: string;
-  },
+
+// ──────────────────────────────────────────────────────────────────────────
+// Total revenue (single number)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function getTotalRevenue(userId: string, filters?: SalesFilters) {
+  await connectToDatabase();
+
+  const match = buildMatchStage(userId, filters);
+
+  const result = await Transaction.aggregate<{ total: number }>([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+  ]);
+
+  return result[0]?.total ?? 0;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Transaction count (single number)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function getTransactionCount(
+  userId: string,
+  filters?: SalesFilters
 ) {
-  if (filters?.category) query = query.eq("category", filters.category);
-  if (filters?.region) query = query.eq("region", filters.region);
-  if (filters?.customer_segment)
-    query = query.eq("customer_segment", filters.customer_segment);
-  if (filters?.startDate)
-    query = query.gte("transaction_date", filters.startDate);
-  if (filters?.endDate) query = query.lte("transaction_date", filters.endDate);
-  return query;
+  await connectToDatabase();
+  return Transaction.countDocuments(buildMatchStage(userId, filters));
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Category breakdown
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function getCategoryBreakdown(
+  userId: string,
+  filters?: SalesFilters
+) {
+  await connectToDatabase();
+
+  const match = buildMatchStage(userId, filters);
+
+  const result = await Transaction.aggregate<{ name: string; value: number }>([
+    { $match: match },
+    {
+      $group: {
+        _id: "$category",
+        value: { $sum: "$totalAmount" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        name: "$_id",
+        value: 1,
+      },
+    },
+    { $sort: { value: -1 } },
+  ]);
+
+  return result;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Regional sales
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function getRegionalSales(
+  userId: string,
+  filters?: SalesFilters
+) {
+  await connectToDatabase();
+
+  const match = buildMatchStage(userId, filters);
+
+  const result = await Transaction.aggregate<{ name: string; value: number }>([
+    { $match: match },
+    {
+      $group: {
+        _id: "$region",
+        value: { $sum: "$totalAmount" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        name: "$_id",
+        value: 1,
+      },
+    },
+    { $sort: { value: -1 } },
+  ]);
+
+  return result;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Sales trend (monthly revenue series)
+// Replaces the get_sales_trend Postgres function.
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface SalesTrendPoint {
+  month: Date;
+  revenue: number;
+  transactionCount: number;
+}
+
 export async function getSalesTrend(
+  userId: string,
   category?: string,
   region?: string,
-  months: number = 12,
+  months: number = 12
 ) {
-  const supabase = await createClient();
+  await connectToDatabase();
 
-  const { data, error } = await supabase.rpc("get_sales_trend", {
-    p_category: category || null,
-    p_region: region || null,
-    p_months: months,
-  });
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
 
-  if (error) throw error;
-  return data as SalesTrend[];
+  const match: Record<string, unknown> = {
+    userId: new mongoose.Types.ObjectId(userId),
+    transactionDate: { $gte: cutoff },
+  };
+  if (category) match.category = category;
+  if (region) match.region = region;
+
+  const result = await Transaction.aggregate<SalesTrendPoint>([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          year: { $year: "$transactionDate" },
+          month: { $month: "$transactionDate" },
+        },
+        revenue: { $sum: "$totalAmount" },
+        transactionCount: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        month: {
+          $dateFromParts: {
+            year: "$_id.year",
+            month: "$_id.month",
+            day: 1,
+          },
+        },
+        revenue: 1,
+        transactionCount: 1,
+      },
+    },
+    { $sort: { month: 1 } },
+  ]);
+
+  return result;
 }
 
-export async function getSalesSummary(limit: number = 50) {
-  const supabase = await createClient();
+// ──────────────────────────────────────────────────────────────────────────
+// Sales summary (replaces the sales_summary view)
+// Used by the chatbot for richer breakdowns.
+// ──────────────────────────────────────────────────────────────────────────
 
-  const { data, error } = await supabase
-    .from("sales_summary")
-    .select("*")
-    .limit(limit);
-
-  if (error) throw error;
-  return data as SalesSummary[];
+export interface SalesSummaryRow {
+  month: Date;
+  category: string;
+  region: string;
+  customerSegment: string;
+  transactionCount: number;
+  totalUnitsSold: number;
+  totalRevenue: number;
+  avgTransactionValue: number;
 }
 
-export async function getTotalRevenue(filters?: {
-  category?: string;
-  region?: string;
-  startDate?: string;
-  endDate?: string;
-}) {
-  const supabase = await createClient();
+export async function getSalesSummary(userId: string, limit: number = 50) {
+  await connectToDatabase();
 
-  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
-  let allData: any[] = [];
-  let start = 0;
-  const pageSize = 1000;
-  let hasMore = true;
+  const result = await Transaction.aggregate<SalesSummaryRow>([
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    {
+      $group: {
+        _id: {
+          year: { $year: "$transactionDate" },
+          month: { $month: "$transactionDate" },
+          category: "$category",
+          region: "$region",
+          customerSegment: "$customerSegment",
+        },
+        transactionCount: { $sum: 1 },
+        totalUnitsSold: { $sum: "$quantity" },
+        totalRevenue: { $sum: "$totalAmount" },
+        avgTransactionValue: { $avg: "$totalAmount" },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        month: {
+          $dateFromParts: {
+            year: "$_id.year",
+            month: "$_id.month",
+            day: 1,
+          },
+        },
+        category: "$_id.category",
+        region: "$_id.region",
+        customerSegment: "$_id.customerSegment",
+        transactionCount: 1,
+        totalUnitsSold: 1,
+        totalRevenue: 1,
+        avgTransactionValue: 1,
+      },
+    },
+    { $sort: { month: -1, totalRevenue: -1 } },
+    { $limit: limit },
+  ]);
 
-  while (hasMore) {
-    let query = supabase
-      .from("sales_transactions")
-      .select("total_amount")
-      .range(start, start + pageSize - 1);
-
-    if (filters?.category) {
-      query = query.eq("category", filters.category);
-    }
-    if (filters?.region) {
-      query = query.eq("region", filters.region);
-    }
-    if (filters?.startDate) {
-      query = query.gte("transaction_date", filters.startDate);
-    }
-    if (filters?.endDate) {
-      query = query.lte("transaction_date", filters.endDate);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      start += pageSize;
-      hasMore = data.length === pageSize;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  const total =
-    allData.reduce((sum, item) => sum + Number(item.total_amount), 0) || 0;
-  return total;
-}
-
-export async function getCategoryBreakdown(filters?: {
-  startDate?: string;
-  endDate?: string;
-}) {
-  const supabase = await createClient();
-
-  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
-  let allData: any[] = [];
-  let start = 0;
-  const pageSize = 1000;
-  let hasMore = true;
-
-  while (hasMore) {
-    let query = supabase
-      .from("sales_transactions")
-      .select("category, total_amount")
-      .range(start, start + pageSize - 1);
-
-    if (filters?.startDate) {
-      query = query.gte("transaction_date", filters.startDate);
-    }
-    if (filters?.endDate) {
-      query = query.lte("transaction_date", filters.endDate);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      start += pageSize;
-      hasMore = data.length === pageSize; // Continue if we got a full page
-    } else {
-      hasMore = false;
-    }
-  }
-
-  // Aggregate by category
-  const categoryMap = new Map<string, number>();
-  allData.forEach((item) => {
-    const current = categoryMap.get(item.category) || 0;
-    categoryMap.set(item.category, current + Number(item.total_amount));
-  });
-
-  return Array.from(categoryMap.entries()).map(([name, value]) => ({
-    name,
-    value,
-  }));
-}
-
-export async function getRegionalSales(filters?: {
-  startDate?: string;
-  endDate?: string;
-}) {
-  const supabase = await createClient();
-
-  // Fetch ALL data using pagination to bypass Supabase's 1000-row limit
-  let allData: any[] = [];
-  let start = 0;
-  const pageSize = 1000;
-  let hasMore = true;
-
-  while (hasMore) {
-    let query = supabase
-      .from("sales_transactions")
-      .select("region, total_amount")
-      .range(start, start + pageSize - 1);
-
-    if (filters?.startDate) {
-      query = query.gte("transaction_date", filters.startDate);
-    }
-    if (filters?.endDate) {
-      query = query.lte("transaction_date", filters.endDate);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-
-    if (data && data.length > 0) {
-      allData = allData.concat(data);
-      start += pageSize;
-      hasMore = data.length === pageSize;
-    } else {
-      hasMore = false;
-    }
-  }
-
-  // Aggregate by region
-  const regionMap = new Map<string, number>();
-  allData.forEach((item) => {
-    const current = regionMap.get(item.region) || 0;
-    regionMap.set(item.region, current + Number(item.total_amount));
-  });
-
-  return Array.from(regionMap.entries()).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  return result;
 }

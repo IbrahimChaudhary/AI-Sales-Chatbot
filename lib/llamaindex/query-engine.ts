@@ -5,13 +5,17 @@ import {
 } from "llamaindex";
 import { OpenAI } from "@llamaindex/openai";
 import { getEmbeddingModel } from "./vector-store";
-import { getSalesTransactions, getSalesTrend, getCategoryBreakdown } from "@/lib/database/queries";
+import {
+  getSalesTransactions,
+  getSalesTrend,
+  getCategoryBreakdown,
+} from "@/lib/database/queries";
 
 // Configure LlamaIndex settings
 Settings.llm = new OpenAI({
   apiKey: process.env.GOOGLE_API_KEY,
   model: "google/gemini-3.1-flash-lite-preview",
-  maxTokens: 2048, // Limit to reduce credit usage
+  maxTokens: 2048,
   additionalSessionOptions: {
     baseURL: "https://openrouter.ai/api/v1",
   },
@@ -20,17 +24,22 @@ Settings.llm = new OpenAI({
 Settings.embedModel = getEmbeddingModel();
 
 /**
- * Creates documents from sales data for indexing
+ * Creates documents from a user's sales data for indexing.
+ * Each document represents a different "view" of the data; the retriever
+ * picks which view(s) are relevant to the user's natural-language query.
  */
-export async function createSalesDocuments() {
+export async function createSalesDocuments(userId: string) {
   const documents: Document[] = [];
 
   try {
-    // Get sales trend data
-    const salesTrend = await getSalesTrend(undefined, undefined, 12);
+    // Sales trend (last 12 months)
+    const salesTrend = await getSalesTrend(userId, undefined, undefined, 12);
     if (salesTrend && salesTrend.length > 0) {
       const trendText = `Sales Trend Data (Last 12 Months):\n${salesTrend
-        .map((t) => `Month: ${t.month}, Revenue: $${t.revenue}, Transactions: ${t.transaction_count}`)
+        .map(
+          (t) =>
+            `Month: ${t.month.toISOString().slice(0, 7)}, Revenue: $${t.revenue}, Transactions: ${t.transactionCount}`
+        )
         .join("\n")}`;
 
       documents.push(
@@ -45,8 +54,8 @@ export async function createSalesDocuments() {
       );
     }
 
-    // Get category breakdown
-    const categories = await getCategoryBreakdown();
+    // Category breakdown
+    const categories = await getCategoryBreakdown(userId);
     if (categories && categories.length > 0) {
       const categoryText = `Sales by Category:\n${categories
         .map((c) => `${c.name}: $${c.value}`)
@@ -63,14 +72,14 @@ export async function createSalesDocuments() {
       );
     }
 
-    // Get recent transactions summary
-    const transactions = await getSalesTransactions(50);
+    // Recent transactions
+    const transactions = await getSalesTransactions(userId, 50);
     if (transactions && transactions.length > 0) {
       const transactionText = `Recent Sales Transactions (${transactions.length} records):\n${transactions
         .slice(0, 10)
         .map(
           (t) =>
-            `Date: ${t.transaction_date}, Product: ${t.product_name}, Amount: $${t.total_amount}, Region: ${t.region}`
+            `Date: ${t.transactionDate.toISOString().slice(0, 10)}, Product: ${t.productName}, Amount: $${t.totalAmount}, Region: ${t.region}`
         )
         .join("\n")}`;
 
@@ -94,30 +103,25 @@ export async function createSalesDocuments() {
 }
 
 /**
- * Query the sales data using LlamaIndex
+ * Query the user's sales data using LlamaIndex semantic search.
  */
-export async function querySalesData(query: string) {
+export async function querySalesData(userId: string, query: string) {
   try {
-    // Create documents from current sales data
-    const documents = await createSalesDocuments();
+    const documents = await createSalesDocuments(userId);
 
     if (documents.length === 0) {
       console.warn("No documents created, falling back to direct queries");
       return null;
     }
 
-    // Create index from documents
     const index = await VectorStoreIndex.fromDocuments(documents);
 
-    // Use retriever instead of query engine to skip LLM synthesis (saves credits!)
     const retriever = index.asRetriever({
       similarityTopK: 3,
     });
 
-    // Retrieve relevant documents based on semantic similarity
     const nodes = await retriever.retrieve(query);
 
-    // Extract data types from matched nodes and re-fetch fresh data
     const matchedTypes = new Set<string>();
     nodes.forEach((nodeWithScore) => {
       const metadata = nodeWithScore.node.metadata;
@@ -128,20 +132,20 @@ export async function querySalesData(query: string) {
 
     console.log("Matched data types:", Array.from(matchedTypes));
 
-    // Re-fetch the exact data based on matched types (avoids JSON truncation issues)
-    const relevantData: any = {};
+    // Re-fetch fresh data for the matched types (avoids JSON truncation issues
+    // and matches the original behavior).
+    const relevantData: Record<string, unknown> = {};
     const sources: string[] = [];
-    const typesArray = Array.from(matchedTypes);
 
-    for (const type of typesArray) {
+    for (const type of Array.from(matchedTypes)) {
       if (type === "sales_trend") {
-        relevantData.sales_trend = await getSalesTrend(undefined, undefined, 12);
+        relevantData.sales_trend = await getSalesTrend(userId, undefined, undefined, 12);
         sources.push("sales_trend");
       } else if (type === "category_breakdown") {
-        relevantData.category_breakdown = await getCategoryBreakdown();
+        relevantData.category_breakdown = await getCategoryBreakdown(userId);
         sources.push("category_breakdown");
       } else if (type === "transactions") {
-        relevantData.transactions = await getSalesTransactions(20);
+        relevantData.transactions = await getSalesTransactions(userId, 20);
         sources.push("transactions");
       }
     }
@@ -154,4 +158,4 @@ export async function querySalesData(query: string) {
     console.error("Error querying sales data:", error);
     return null;
   }
-} 
+}

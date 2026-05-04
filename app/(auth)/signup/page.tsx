@@ -3,35 +3,36 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import { seedDataForNewUser } from "@/app/auth/actions";
 import { Loader2 } from "lucide-react";
+import { signupAction } from "@/app/auth/actions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 export default function SignupPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("");
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    const formData = new FormData();
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("name", name);
 
-    //Adding random data for new user.
-    await seedDataForNewUser();
+    const result = await signupAction(null, formData);
 
-    if (error) {
+    if (!result.ok) {
       setLoading(false);
-      setError(error.message);
+      setError(result.error);
       return;
     }
 
@@ -52,39 +53,53 @@ export default function SignupPage() {
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
+            <Label htmlFor="name" className="text-sm font-medium">
+              Name
+            </Label>
+            <Input
+              id="name"
+              type="text"
+              required
+              value={email}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-Input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="Alex"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-sm font-medium">
               Email
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full rounded-md border border-Input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="you@example.com"
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
+            <Label htmlFor="password" className="text-sm font-medium">
               Password
-            </label>
-            <input
+            </Label>
+            <Input
               id="password"
               type="password"
               required
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="At least 6 characters"
+              className="w-full rounded-md border border-Input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="At least 8 characters"
             />
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
@@ -97,7 +112,7 @@ export default function SignupPage() {
             ) : (
               "Sign up"
             )}
-          </button>
+          </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground">
