@@ -32,13 +32,22 @@ export function ChatbotWidget() {
   const [welcomeComplete, setWelcomeComplete] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: smooth ? "smooth" : ("instant" as ScrollBehavior),
+    });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(true);
   }, [messages]);
+
+  useEffect(() => {
+    if (!isOpen || isMinimized) return;
+    
+    const timer = setTimeout(() => scrollToBottom(false), 0);
+    return () => clearTimeout(timer);
+  }, [isOpen, isMinimized]);
 
   // Typewriter effect for welcome message — only runs when chat opens AND
   // there are no messages yet (don't replay welcome on a returning conversation)
