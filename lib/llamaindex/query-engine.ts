@@ -13,7 +13,7 @@ import {
 
 // Configure LlamaIndex settings
 Settings.llm = new OpenAI({
-  apiKey: process.env.GOOGLE_API_KEY,
+  apiKey: process.env.OPENROUTER_API_KEY,
   model: "google/gemini-3.1-flash-lite-preview",
   maxTokens: 2048,
   additionalSessionOptions: {

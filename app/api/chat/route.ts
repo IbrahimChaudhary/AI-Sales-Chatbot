@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const openrouter = new OpenRouter({
-  apiKey: process.env.GOOGLE_API_KEY!,
+  apiKey: process.env.OPENROUTER_API_KEY!,
 });
 
 const systemPrompt = `You are an AI sales analyst assistant with access to a REAL sales database.
